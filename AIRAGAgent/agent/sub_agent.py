@@ -51,6 +51,7 @@ class SubAgent:
     category: str = "domain"   # builtin / domain / memory / artifact / system
 
     def __hash__(self):
+        """按名称计算哈希，保证 SubAgent 可作字典键。"""
         return hash(self.name)
 
     def build_agent(self, llm=None):
@@ -89,6 +90,7 @@ class SubAgentRunner:
     """
 
     def __init__(self, sub_agent: SubAgent, llm=None):
+        """初始化执行器：保存 SubAgent 并构建独立的 agent 实例。"""
         self.sub_agent = sub_agent
         # 每次执行都用独立 agent 实例，避免并行 stream 互相干扰；
         # llm 缺省用系统默认模型（chat_model）
@@ -96,6 +98,7 @@ class SubAgentRunner:
 
     @staticmethod
     def _history_to_messages(chat_history: Optional[List[Dict[str, str]]]) -> list:
+        """把聊天历史（角色+内容字典列表）转成 LangChain 消息列表。"""
         if not chat_history:
             return []
         messages = []
@@ -216,6 +219,7 @@ class SubAgentRegistry:
     _instance: Optional["SubAgentRegistry"] = None
 
     def __new__(cls):
+        """单例模式：保证全局只存在一个注册中心实例。"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._agents: Dict[str, SubAgent] = {}
@@ -223,28 +227,40 @@ class SubAgentRegistry:
         return cls._instance
 
     def register(self, agent: SubAgent) -> None:
+        """注册一个 SubAgent，并按名称存进注册表。"""
         self._agents[agent.name] = agent
         logger.info(f"[SubAgentRegistry] 注册 subagent: {agent.name}（含 {len(agent.tools)} 个工具，category={agent.category}）")
 
     def get(self, name: str) -> Optional[SubAgent]:
+        """按名称获取 SubAgent，不存在时返回 None。"""
         return self._agents.get(name)
 
     def all(self) -> Dict[str, SubAgent]:
+        """返回全部已注册 SubAgent 的字典副本。"""
         return dict(self._agents)
 
     def by_category(self, category: str) -> Dict[str, SubAgent]:
+        """按分类筛选出对应类别的 SubAgent 字典。"""
         return {n: a for n, a in self._agents.items() if a.category == category}
 
-    def descriptions_for_planner(self) -> str:
-        """生成给 Planner 看的 SubAgent 选择菜单（仅 name + description + workflow）。"""
+    def descriptions_for_planner(self, exclude: Optional[set] = None) -> str:
+        """生成给 Planner 看的 SubAgent 选择菜单（仅 name + description + workflow）。
+
+        Args:
+            exclude: 需要从菜单中排除的 subagent name 集合（如关闭联网搜索时排除 "search"）。
+        """
+        exclude = exclude or set()
         lines = ["## 可用 SubAgent 清单（选择 step.subagent 时只能用以下 name）"]
         for name, agent in self._agents.items():
+            if name in exclude:
+                continue
             lines.append(f"- **{name}**：{agent.description}")
             if agent.workflow_hint:
                 lines.append(f"  - 调用流程：{agent.workflow_hint}")
         return "\n".join(lines)
 
     def find_by_tool(self, tool_name: str) -> Optional[SubAgent]:
+        """根据工具名反查拥有该工具的 SubAgent，未找到时返回 None。"""
         for agent in self._agents.values():
             for t in agent.tools:
                 if getattr(t, "name", None) == tool_name:
@@ -294,6 +310,7 @@ def run_steps_parallel(
     results: List[Dict[str, Any]] = []
 
     def _run_one(spec):
+        """执行单个并行步骤：查找 SubAgent 并在独立 context 副本中流式跑完，返回结果。"""
         idx = spec["step_idx"]
         sub_name = spec["subagent"]
         desc = spec["description"]
@@ -306,6 +323,7 @@ def run_steps_parallel(
         output_parts = []
         try:
             def _inner():
+                """在独立的 context 副本中流式消费 SubAgent 输出并分类收集。"""
                 for chunk in runner.execute_stream(desc, chat_history):
                     if isinstance(chunk, dict):
                         if chunk.get("type") == "output":

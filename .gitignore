@@ -33,6 +33,10 @@ Thumbs.db
 deploy/dist/
 frontend/dist/
 
+# Desktop app (Electron)
+desktop/node_modules/
+desktop/release/
+
 # ===== 运行时产物（runtime artifacts）=====
 # 日志（按服务/日期切分）
 **/logs/
@@ -46,6 +50,7 @@ service_*.log
 
 # 向量数据库持久化（ChromaDB）
 chroma_ab/
+chroma_ab.bak_*/
 
 # 前端构建产物（vite build → ../static）
 static/
@@ -55,6 +60,9 @@ uploads/
 
 # AI 工作区（按用户/日期/计划隔离，含 .playwright Chromium 二进制）
 workspace/
+
+# Agent 本地记忆
+.workbuddy/
 
 # 测试缓存
 .pytest_cache/

@@ -18,10 +18,12 @@ def _hash_password(password: str) -> str:
 
 
 def _hash_security_answer(answer: str) -> str:
+    """对密保答案去空格并转小写后再做加盐哈希。"""
     return _hash_password(answer.strip().lower())
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
+    """校验明文密码与存储的加盐哈希是否匹配。"""
     try:
         salt_hex, hash_hex = stored_hash.split(":")
         salt = bytes.fromhex(salt_hex)
@@ -32,6 +34,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 def verify_security_answer(answer: str, stored_hash: str) -> bool:
+    """校验密保答案（去空格小写后）与存储的哈希是否匹配。"""
     return verify_password(answer.strip().lower(), stored_hash)
 
 
@@ -54,6 +57,7 @@ def create_user(username: str, password: str, role: str = "user") -> Optional[di
 
 
 def get_user_by_username(username: str) -> Optional[dict]:
+    """按用户名查询用户认证信息（含密码哈希），不存在返回 None。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -75,6 +79,7 @@ def get_user_by_username(username: str) -> Optional[dict]:
 
 
 def get_user_by_id(user_id: int) -> Optional[dict]:
+    """按用户ID查询用户认证信息（含是否已设置密保问题），不存在返回 None。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -113,6 +118,7 @@ def get_all_users() -> list:
 
 
 def change_password(user_id: int, old_password: str, new_password: str) -> bool:
+    """校验原密码后更新用户密码，成功返回 True。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT password_hash FROM users WHERE id = %s", (user_id,))
@@ -163,6 +169,7 @@ def delete_user(target_user_id: int) -> bool:
 # ==================== 密保问题 ====================
 
 def set_security_question(user_id: int, question: str, answer: str) -> bool:
+    """设置或更新用户的密保问题与答案（内容为空时返回 False）。"""
     if not question.strip() or not answer.strip():
         return False
     with get_db() as conn:
@@ -177,6 +184,7 @@ def set_security_question(user_id: int, question: str, answer: str) -> bool:
 
 
 def has_security_question(user_id: int) -> bool:
+    """查询用户是否已设置密保问题。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute("SELECT 1 FROM security_questions WHERE user_id = %s", (user_id,))
@@ -184,6 +192,7 @@ def has_security_question(user_id: int) -> bool:
 
 
 def get_security_question_by_username(username: str) -> Optional[dict]:
+    """按用户名查询密保问题（admin 账号不参与），未设置时返回 None。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -199,6 +208,7 @@ def get_security_question_by_username(username: str) -> Optional[dict]:
 
 
 def reset_password_by_security_answer(username: str, answer: str, new_password: str) -> bool:
+    """校验密保答案正确后重置用户密码，成功返回 True。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -224,6 +234,7 @@ def reset_password_by_security_answer(username: str, answer: str, new_password: 
 # ==================== 登录设备 ====================
 
 def _parse_os(user_agent: str) -> str:
+    """从 User-Agent 中识别操作系统类型（识别不到返回空串）。"""
     ua = (user_agent or "").lower()
     if "windows" in ua: return "Windows"
     if "mac" in ua or "darwin" in ua: return "macOS"
@@ -234,6 +245,7 @@ def _parse_os(user_agent: str) -> str:
 
 
 def _parse_browser(user_agent: str) -> str:
+    """从 User-Agent 中识别浏览器类型（识别不到返回空串）。"""
     ua = (user_agent or "").lower()
     if "edg" in ua: return "Edge"
     if "chrome" in ua: return "Chrome"
@@ -243,6 +255,7 @@ def _parse_browser(user_agent: str) -> str:
 
 
 def create_login_device(user_id: int, device_token: str, user_agent: str, ip: str) -> None:
+    """记录一条登录设备信息（同一设备 token 重复登录则更新 IP 与活跃时间）。"""
     with get_db() as conn:
         cur = conn.cursor()
         ua = (user_agent or "").lower()
@@ -265,6 +278,7 @@ def create_login_device(user_id: int, device_token: str, user_agent: str, ip: st
 
 
 def touch_login_device(device_token: str, ip: Optional[str] = None) -> None:
+    """刷新登录设备最近活跃时间（可选同时更新 IP）。"""
     with get_db() as conn:
         cur = conn.cursor()
         if ip:
@@ -283,6 +297,7 @@ def touch_login_device(device_token: str, ip: Optional[str] = None) -> None:
 
 
 def get_login_devices(user_id: int) -> list:
+    """查询用户的全部登录设备列表（按最近活跃时间倒序）。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -306,6 +321,7 @@ def get_login_devices(user_id: int) -> list:
 
 
 def revoke_login_device(user_id: int, device_id: int) -> bool:
+    """撤销指定登录设备（置 is_revoked=1），成功返回 True。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
@@ -317,6 +333,7 @@ def revoke_login_device(user_id: int, device_id: int) -> bool:
 
 
 def revoke_all_other_devices(user_id: int, current_token: str) -> int:
+    """撤销当前设备以外的所有登录设备，返回被撤销的数量。"""
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(

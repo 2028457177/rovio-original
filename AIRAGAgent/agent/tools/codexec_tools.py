@@ -121,6 +121,7 @@ def _scan_python_dangers(code: str) -> List[str]:
 
 
 def _truncate(text: str, limit: int = _MAX_OUTPUT_CHARS) -> str:
+    """截断过长的文本，保留开头与结尾并提示省略。"""
     if len(text) <= limit:
         return text
     half = limit // 2

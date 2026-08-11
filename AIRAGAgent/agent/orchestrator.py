@@ -29,6 +29,7 @@ SSE 事件协议（与旧协议兼容 + 新增 plan_*）：
 from __future__ import annotations
 
 import json
+import shutil
 import contextvars
 from pathlib import Path
 from typing import List, Dict, Optional, Generator, Any
@@ -45,7 +46,7 @@ from AIRAGAgent.agent.plan import (
     create_plan, update_step_status, replace_plan_steps, update_plan_status,
 )
 from AIRAGAgent.agent.sub_agent import SubAgentRegistry, SubAgentRunner, run_steps_parallel
-from AIRAGAgent.agent.tools.agent_tools import user_id_var
+from AIRAGAgent.agent.tools.agent_tools import user_id_var, search_enabled_var
 from AIRAGAgent.agent.tools.artifact_tools import (
     current_plan_id_var, current_session_id_var, current_step_idx_var,
 )
@@ -104,6 +105,13 @@ PLANNER_SYSTEM_PROMPT = """你是 Rovio 的任务规划器。你的活儿是：�
 ## 选 SubAgent 的原则
 - 只能从下面"可用 SubAgent 清单"里选 name，不要编造
 - 不知道选哪个时，优先选最贴切的；实在贴不上就留空让 Orchestrator 自己回答
+
+## 知识库与联网的优先级（知识库优先，联网兜底）
+- 用户在问内部资料 / 操作指南 / 效率方法 / 文档处理技巧等内部知识 → 优先 knowledge（查知识库）
+- 用户在问时效性信息（最新新闻、实时数据、今日热点、实时行情等）→ 直接 search（联网搜索）
+- 系统提示"知识库已命中"时 → 优先 knowledge 或直接回答（subagent 留空），不要选 search 联网；
+  仅当知识库内容明显不足以回答用户问题时才考虑 search
+- 系统提示"联网搜索已关闭"时 → 任何情况都不要选 search，只靠知识库 / 已有知识回答
 
 ## description 写法
 - 用自然语言把这一步要干什么说清楚
@@ -216,6 +224,7 @@ class Orchestrator:
 
     @staticmethod
     def _format_history(chat_history: Optional[List[Dict[str, str]]]) -> str:
+        """把会话历史格式化成提示词用的文本片段（只取最近 6 条，每条截 200 字）。"""
         if not chat_history:
             return ""
         lines = ["## 对话历史（最近几条）"]
@@ -226,19 +235,164 @@ class Orchestrator:
         return "\n".join(lines) + "\n---\n"
 
     def _get_subagent_menu(self) -> str:
-        return self.registry.descriptions_for_planner()
+        """生成 Planner 可用的 SubAgent 菜单（联网搜索关闭时排除 search）。"""
+        exclude = None if search_enabled_var.get(True) else {"search"}
+        return self.registry.descriptions_for_planner(exclude=exclude)
+
+    # ────────────────────────────────────────
+    # 知识库预检：知识库优先、联网兜底
+    # ────────────────────────────────────────
+
+    @staticmethod
+    def _kb_hit_threshold() -> float:
+        """知识库预检命中阈值（0~1，chroma.yml 可配置，默认 0.5）。"""
+        try:
+            from AIRAGAgent.utils.config_handler import chroma_conf
+            return float(chroma_conf.get("hit_score_threshold", 0.5))
+        except Exception:
+            return 0.5
+
+    @staticmethod
+    def _kb_accessible_ids(user_id: Optional[int]) -> list:
+        """直连知识库库（KB_DB，默认 lc_kb）查询用户可访问的知识库 id。
+
+        不能复用 AIRAGAgent.database.connection.get_db()：chat_service 启动时
+        会通过 db_patch 把数据库重定向到 lc_chat（该库 knowledge_bases 为空表），
+        而知识库元数据实际存放在 kb_service 的独立库 KB_DB 中。
+        """
+        import os
+        import pymysql
+        from pymysql.cursors import DictCursor
+        from AIRAGAgent.utils.config_handler import mysql_conf
+        db = os.getenv("KB_DB") or os.getenv("KB_DATABASE") or "lc_kb"
+        conn = pymysql.connect(
+            host=mysql_conf.get("host", "localhost"),
+            port=int(mysql_conf.get("port", 3306)),
+            user=mysql_conf.get("user", "root"),
+            password=mysql_conf.get("password", ""),
+            database=db,
+            charset=mysql_conf.get("charset", "utf8mb4"),
+            cursorclass=DictCursor,
+            autocommit=True,
+        )
+        try:
+            cur = conn.cursor()
+            if user_id is None:
+                cur.execute(
+                    "SELECT id FROM knowledge_bases "
+                    "WHERE is_enabled = 1 AND scope = 'global' ORDER BY id"
+                )
+            else:
+                cur.execute(
+                    "SELECT id FROM knowledge_bases "
+                    "WHERE is_enabled = 1 AND (scope = 'global' "
+                    "OR (scope = 'personal' AND owner_user_id = %s)) ORDER BY id",
+                    (user_id,),
+                )
+            return [r["id"] for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def _kb_precheck(self, query: str, user_id: int) -> Optional[float]:
+        """知识库预检：检索用户可见知识库，返回最高相关度分数（0~1）。
+
+        返回 None 表示无可用知识库 / 检索失败 / 无结果。
+        供"知识库优先、联网兜底"路由：分数 >= 阈值视为知识库已命中。
+        """
+        try:
+            from AIRAGAgent.kb import service as kb_service
+            from AIRAGAgent.utils.config_handler import chroma_conf
+            kb_ids = self._kb_accessible_ids(user_id)
+            if not kb_ids:
+                return None
+            k = int(chroma_conf.get("k", 3))
+            results = kb_service.search_with_scores(query, kb_ids, top_k=k)
+            if not results:
+                return None
+            return max(float(score) for _, score in results)
+        except Exception as e:
+            logger.warning(f"[KB路由] 知识库预检异常: {type(e).__name__}: {e}")
+            return None
+
+    def _kb_route_hint(self, query: str, user_id: int) -> str:
+        """构造知识库路由提示（注入 Planner 上下文）。
+
+        - 命中阈值：优先 knowledge / 直接回答，不要联网
+        - 未命中 + 搜索开：可 search 联网兜底
+        - 未命中 + 搜索关：只靠知识库 / 已有知识，不要联网
+        """
+        # 明显太短（闲聊/问候）跳过预检，避免无谓的向量检索开销
+        if len(query.strip()) < 4:
+            return ""
+        best = self._kb_precheck(query, user_id)
+        logger.info(f"[KB路由] user={user_id} query={query[:30]!r} best={best}")
+        if best is None:
+            return ""
+        threshold = self._kb_hit_threshold()
+        if best >= threshold:
+            return (
+                "\n\n## 知识库命中提示\n"
+                f"内部知识库已检索到与用户问题相关的内容（最高相关度 {best:.2f}，阈值 {threshold}）。\n"
+                "若用户在问内部资料 / 操作指南 / 方法类问题：优先用 knowledge 子代理查知识库作答，"
+                "或内容充分时直接回答（subagent 留空），**不要**选 search 联网；"
+                "仅当知识库内容明显不足以回答时才考虑 search。\n"
+            )
+        if search_enabled_var.get(True):
+            return (
+                "\n\n## 知识库提示\n"
+                f"内部知识库未命中（最高相关度 {best:.2f}，低于阈值 {threshold}）。\n"
+                "若问题需要时效性信息或知识库之外的知识，可用 search 联网搜索兜底。\n"
+            )
+        return (
+            "\n\n## 知识库提示\n"
+            f"内部知识库未命中（最高相关度 {best:.2f}），且联网搜索已关闭。\n"
+            "请仅基于知识库 / 已有知识尽力回答，不要联网。\n"
+        )
+
+    def _kb_retrieve_context(self, user_id: int, query: str) -> str:
+        """检索知识库并拼成可引用的上下文（直接回答路径使用）。
+
+        相关度未达阈值 / 无可用知识库时返回空串。
+        """
+        try:
+            from AIRAGAgent.kb import service as kb_service
+            from AIRAGAgent.utils.config_handler import chroma_conf
+            kb_ids = self._kb_accessible_ids(user_id)
+            if not kb_ids:
+                return ""
+            k = int(chroma_conf.get("k", 3))
+            results = kb_service.search_with_scores(query, kb_ids, top_k=k)
+            if not results:
+                return ""
+            best = max(float(score) for _, score in results)
+            if best < self._kb_hit_threshold():
+                return ""
+            lines = [f"## 知识库检索结果（最高相关度 {best:.2f}，可引用作答，请勿编造）"]
+            for i, (doc, _score) in enumerate(results[:2], 1):
+                lines.append(f"【参考资料{i}】{doc.page_content}")
+            return "\n".join(lines) + "\n"
+        except Exception as e:
+            logger.warning(f"[KB路由] 知识库检索上下文异常: {type(e).__name__}: {e}")
+            return ""
 
     @staticmethod
     def _recall_relevant_memory(user_id: int, query: str) -> str:
-        """召回与用户查询相关的长期记忆，注入 Planner 上下文。"""
+        """召回与用户查询相关的长期记忆，注入 Planner 上下文。
+
+        向量检索版：用 query 嵌入在 Qdrant 中按 user_id 过滤召回 top-k，
+        按相似度排序。Qdrant 不可用时静默返回空串，不影响主流程。
+        """
         try:
-            from AIRAGAgent.database import recall_memories
-            rows = recall_memories(user_id, limit=10)
+            from AIRAGAgent.agent.memory.vector_store import memory_store
+            from AIRAGAgent.utils.config_handler import memory_conf
+            top_k = int(memory_conf.get("recall_top_k", 5))
+            threshold = float(memory_conf.get("recall_score_threshold", 0.35))
+            rows = memory_store.search_memories(user_id, query, top_k=top_k, score_threshold=threshold)
             if not rows:
                 return ""
-            lines = ["## 关于该用户的长期记忆（可能影响规划）"]
+            lines = ["## 关于该用户的长期记忆（按相关性召回，可能影响规划）"]
             for r in rows:
-                lines.append(f"- [{r['type']}] {r['key']}: {r['value']}")
+                lines.append(f"- [{r['memory_type']}] {r['content']}")
             return "\n".join(lines) + "\n---\n"
         except Exception as e:
             logger.debug(f"[Orchestrator] 召回记忆失败（忽略）: {e}")
@@ -257,6 +411,7 @@ class Orchestrator:
         """
         history_ctx = self._format_history(chat_history)
         memory_ctx = self._recall_relevant_memory(user_id, query)
+        kb_hint = self._kb_route_hint(query, user_id)
         menu = self._get_subagent_menu()
         llm = self._llm_for(user_id)
 
@@ -265,6 +420,7 @@ class Orchestrator:
             f"用户需求：\n{query}\n\n"
             f"{history_ctx}"
             f"{memory_ctx}"
+            f"{kb_hint}"
             f"{extra_hint}"
             f"请制定执行计划。如果这是简单问候或闲聊，给 1 步且 subagent 留空。"
         )
@@ -296,6 +452,7 @@ class Orchestrator:
         """
         history_ctx = self._format_history(chat_history)
         memory_ctx = self._recall_relevant_memory(user_id, query)
+        kb_hint = self._kb_route_hint(query, user_id)
         menu = self._get_subagent_menu()
         llm = self._llm_for(user_id)
 
@@ -304,6 +461,7 @@ class Orchestrator:
             f"用户需求：\n{query}\n\n"
             f"{history_ctx}"
             f"{memory_ctx}"
+            f"{kb_hint}"
             f"{extra_hint}"
             f"请制定执行计划。如果这是简单问候或闲聊，给 1 步且 subagent 留空。"
         )
@@ -378,6 +536,10 @@ class Orchestrator:
 
         llm = self._llm_for(plan.user_id)
         subagent_name = step.subagent or ""
+        # 联网搜索关闭时，若步骤仍引用 search（如旧计划/修订残留），降级为直接回答
+        if subagent_name == "search" and not search_enabled_var.get(True):
+            logger.info(f"[Executor] step {step.step_idx} 引用 search，但联网搜索已关闭，改为直接回答")
+            subagent_name = ""
         task_desc = step.description if not feedback else f"{step.description}\n\n上次执行有问题，反馈：{feedback}"
         # 注入前序步骤结果（文件路径 + 摘要），修复跨步骤数据交接断点
         task_desc += self._build_step_context(plan, exclude={step.step_idx})
@@ -405,6 +567,16 @@ class Orchestrator:
                 # 用原始 query 而不是 step.description（Planner 改写会偏语义）；
                 # 多步 plan 的 finalize 阶段用 task_desc（含反馈信息）
                 user_content = query if (is_single_step and query) else task_desc
+                # 单步直接回答（闲聊/通用问答）时召回长期记忆注入最终回复
+                # 修复：Planner 召回了记忆但直接回答阶段没注入，导致"思考知道但回复否认"
+                if is_single_step:
+                    memory_ctx = self._recall_relevant_memory(plan.user_id, query or task_desc)
+                    if memory_ctx:
+                        user_content = f"{memory_ctx}\n{user_content}"
+                    # 知识库优先：直接回答路径也注入命中的知识库内容，避免"预检提示命中但回答没引用"
+                    kb_ctx = self._kb_retrieve_context(plan.user_id, query or task_desc)
+                    if kb_ctx:
+                        user_content = f"{kb_ctx}\n{user_content}"
                 # 用 stream 真流式
                 stream = llm.stream(
                     [SystemMessage(content=identity)] + history_msgs + [HumanMessage(content=user_content)]
@@ -472,8 +644,9 @@ class Orchestrator:
         token_plan = current_plan_id_var.set(plan.id)
         token_session = current_session_id_var.set(plan.session_id)
 
-        # 所有 step 都有 subagent 才走并行路径；混有无 subagent 的退化为串行
-        if all(s.subagent for s in steps):
+        # 所有 step 都有 subagent 且未被禁用才走并行路径；混有无 subagent / 被禁用 subagent 的退化为串行
+        disabled = {"search"} if not search_enabled_var.get(True) else set()
+        if all(s.subagent for s in steps) and not any(s.subagent in disabled for s in steps):
             yield {"type": "step_started", "step_idx": -1,
                    "subagent": "parallel", "description": f"并行执行 {len(steps)} 个步骤"}
             batch_indices = {s.step_idx for s in steps}
@@ -517,10 +690,51 @@ class Orchestrator:
     # 跨步骤数据交接：plan_results 落盘 + 下游上下文注入
     # ────────────────────────────────────────
 
+    def _plan_dir(self, plan: Plan) -> Path:
+        """计划专属目录 workspace/{user_id}/YYYYMMDD/tasks/<plan_id>/（codexec cwd）。"""
+        return get_daily_workspace(plan.user_id) / "tasks" / plan.id
+
     def _plan_results_dir(self, plan: Plan) -> Path:
         """每个计划独立的步骤结果目录（位于计划专属目录 tasks/<plan_id>/ 下，
         codexec 子进程 cwd 即该目录，可直接相对路径读取）。"""
-        return get_daily_workspace(plan.user_id) / "tasks" / plan.id / "plan_results"
+        return self._plan_dir(plan) / "plan_results"
+
+    def _promote_plan_outputs(self, plan: Plan) -> None:
+        """计划完成后整理工作区：只给用户留最终文件。
+
+        1. 删除中间步骤结果 plan_results/（完整数据已持久化到 DB，无需保留）；
+        2. 把计划目录下剩余的最终交付文件/目录提升到用户当天工作区根目录
+           （去掉 tasks/<plan_id>/ 容器嵌套，同名冲突加 plan 短后缀）；
+        3. 清理空掉的 tasks 目录。
+        这样前端「AI 工作区」里只展示最终成品，不再看到 plan_results/step_*.md 之类的中间产物。
+        """
+        try:
+            plan_dir = self._plan_dir(plan)
+            if not plan_dir.exists():
+                return
+            daily = get_daily_workspace(plan.user_id)
+            # 1) 删除中间步骤结果
+            pr = plan_dir / "plan_results"
+            if pr.exists():
+                shutil.rmtree(pr, ignore_errors=True)
+            # 2) 提升最终交付文件到当天工作区根目录
+            for item in sorted(plan_dir.iterdir(), key=lambda p: p.name):
+                dest = daily / item.name
+                if dest.exists():
+                    if item.is_dir():
+                        dest = daily / f"{item.name}_{plan.id[:6]}"
+                    else:
+                        dest = daily / f"{item.stem}_{plan.id[:6]}{item.suffix}"
+                shutil.move(str(item), str(dest))
+            # 3) 清理空的任务容器目录
+            for d in (plan_dir, plan_dir.parent):
+                try:
+                    d.rmdir()
+                except OSError:
+                    pass
+            logger.info(f"[Workspace] 计划 {plan.id} 已整理工作区：清除中间产物，最终文件提升到当天目录")
+        except Exception as e:
+            logger.warning(f"[Workspace] 计划 {plan.id} 工作区整理失败: {e}")
 
     def _save_step_result(self, plan: Plan, step: PlanStep) -> str:
         """把步骤结果落盘到 plan_results/<plan_id>/step_<idx>.md，返回相对路径（失败返回空串）。
@@ -570,6 +784,7 @@ class Orchestrator:
 
     @staticmethod
     def _history_to_messages(chat_history: Optional[List[Dict[str, str]]]) -> list:
+        """把最近会话历史转换为 LangChain 消息列表（最多取最近 6 条）。"""
         msgs = []
         if not chat_history:
             return msgs
@@ -818,6 +1033,9 @@ class Orchestrator:
 
         # ── 3. 汇总最终答案 ──
         final_text = yield from self._finalize(plan, query, chat_history)
+        # 计划正常完成后整理工作区：清除 plan_results 中间产物，只留最终交付文件
+        if plan.status == PlanStatus.COMPLETED.value:
+            self._promote_plan_outputs(plan)
         yield {"type": "plan_completed", "plan": plan.to_dict()}
         logger.info(f"[Orchestrator] plan {plan.id} 完成，final_answer 长度={len(final_text)}")
 
@@ -839,6 +1057,7 @@ _orchestrator: Optional[Orchestrator] = None
 
 
 def get_orchestrator() -> Orchestrator:
+    """获取全局唯一的 Orchestrator 单例（首次调用时创建）。"""
     global _orchestrator
     if _orchestrator is None:
         _orchestrator = Orchestrator()

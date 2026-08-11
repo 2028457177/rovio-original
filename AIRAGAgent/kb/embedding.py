@@ -43,6 +43,7 @@ class OpenAICompatEmbeddings(Embeddings):
     """
 
     def __init__(self, base_url: str, api_key: str, model: str, timeout: int = 60, batch_size: int = 20):
+        """初始化嵌入客户端：校验 base_url/api_key 并记录模型与批次大小。"""
         self.base_url = (base_url or "").rstrip("/")
         if not self.base_url:
             raise ValueError("[KB] openai_base_url 未配置")
@@ -54,6 +55,7 @@ class OpenAICompatEmbeddings(Embeddings):
         self.batch_size = batch_size
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """按批次调用 /embeddings 接口为文本列表生成向量，返回每个文本对应的向量列表。"""
         import requests
         url = f"{self.base_url}/embeddings"
         headers = {
@@ -79,13 +81,16 @@ class OpenAICompatEmbeddings(Embeddings):
         return out
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """为多个文本批量生成向量。"""
         return self._embed_batch(texts)
 
     def embed_query(self, text: str) -> list[float]:
+        """为单个查询文本生成向量。"""
         return self._embed_batch([text])[0]
 
 
 def get_embedding_provider() -> str:
+    """从配置中读取当前嵌入提供者名称（dashscope/openai），返回小写字符串。"""
     return str(chroma_conf.get("embedding_provider", "openai")).strip().lower()
 
 

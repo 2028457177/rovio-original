@@ -52,6 +52,7 @@ def subscribe_events(channel: str, handler: Callable[[dict], None], stop_event: 
         return
 
     def _run():
+        """订阅线程主体：循环消费频道消息并调用 handler，支持优雅停止。"""
         try:
             client = get_redis_client()
             pubsub = client.pubsub()

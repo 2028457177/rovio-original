@@ -1,6 +1,8 @@
 collection_name : agent
 persist_directory : chroma_ab
 k : 3
+# 知识库预检命中阈值（0~1）：Planner 前预检知识库，最高相关度 >= 该值视为"已命中"，优先知识库/直接回答、不联网
+hit_score_threshold : 0.5
 data_path : data
 md5_hex_store : md5.txt
 allow_knowledge_file_type : ["pdf", "txt","xls","xlsx"]

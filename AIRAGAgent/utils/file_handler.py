@@ -6,7 +6,7 @@ from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader,TextLoader
 
 def get_file_md5_hex(filepath:str):     # 获取文件的md5的十六进制字符串
-
+    """计算文件的MD5十六进制字符串（分块读取，大文件也适用）。"""
     if not os.path.exists(filepath):
         logger.error(f"[md5计算]文件{filepath}不存在")
         return
@@ -31,6 +31,7 @@ def get_file_md5_hex(filepath:str):     # 获取文件的md5的十六进制字�
 
 
 def listdir_with_allowed_type(path: str, allowed_types: tuple[str]):        #返回文件夹内的文件列表(允许的文件后缀)
+    """返回文件夹内后缀名符合 allowed_types 的文件路径列表（元组）。"""
     files = []
 
     if not os.path.isdir(path):
@@ -45,10 +46,12 @@ def listdir_with_allowed_type(path: str, allowed_types: tuple[str]):        #返
 
 
 def pdf_loader(filepath: str, passwd=None) -> list[Document]:
+    """加载PDF文件并返回Document文档列表。"""
     return PyPDFLoader(filepath, passwd).load()
 
 
 def txt_loader(filepath: str)-> list[Document]:
+    """按UTF-8编码加载TXT文本文件并返回Document文档列表。"""
     return TextLoader(filepath,encoding="utf-8").load()
 
 

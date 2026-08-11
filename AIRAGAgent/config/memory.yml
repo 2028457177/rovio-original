@@ -1,0 +1,29 @@
+# 长期记忆配置（向量检索 + 自动抽取）
+#
+# 向量库：Qdrant（Docker 部署，见 deploy/qdrant）
+# 嵌入：复用 chroma.yml 的 OpenAI 兼容嵌入（qwen3.7-text-embedding）
+
+# Qdrant 连接
+qdrant_url : http://127.0.0.1:6333
+qdrant_collection : user_memories
+# 向量维度：留 0 则启动时探测（推荐，避免与嵌入模型维度不匹配）
+vector_dim : 0
+# 距离度量：Cosine / Dot / Euclid
+distance : Cosine
+
+# 召回
+recall_top_k : 5
+# 相似度阈值（0-1，低于此值不注入）。0 表示不过滤
+recall_score_threshold : 0.35
+
+# 自动抽取
+# 是否启用自动记忆抽取
+extraction_enabled : true
+# 抽取用的 LLM 走用户自配模型还是系统默认（true=跟随用户配置）
+extraction_use_user_model : true
+# 单次抽取最多产出多少条记忆（防止 LLM 过度抽取）
+extraction_max_memories : 5
+# 用户消息过短则跳过抽取（字节数）
+extraction_min_user_msg_len : 6
+# 抽取超时（秒），超时静默放弃
+extraction_timeout : 30

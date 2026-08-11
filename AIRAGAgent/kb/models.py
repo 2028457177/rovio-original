@@ -11,6 +11,7 @@ from AIRAGAgent.database.connection import get_db
 # ==================== 知识库 ====================
 
 def _row_to_kb(row: dict) -> dict:
+    """把数据库行记录转换成知识库字典（含文档数/分块数统计字段）。"""
     return {
         "id": row["id"],
         "name": row["name"],
@@ -40,6 +41,7 @@ _KB_SELECT = """
 def create_kb(name: str, scope: str, owner_user_id: Optional[int], biz_line: str = "",
               description: str = "", created_by: Optional[int] = None,
               created_by_name: str = "", is_default: bool = False) -> dict:
+    """创建知识库记录并返回新知识库的完整信息字典。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -56,6 +58,7 @@ def create_kb(name: str, scope: str, owner_user_id: Optional[int], biz_line: str
 
 
 def get_kb(kb_id: int) -> Optional[dict]:
+    """按 ID 查询单个知识库，不存在时返回 None。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(_KB_SELECT + " WHERE k.id = %s", (kb_id,))
@@ -162,6 +165,7 @@ def user_owns_kb(user_id: int, kb_id: int) -> bool:
 
 
 def get_default_kb() -> Optional[dict]:
+    """查询系统默认知识库，不存在返回 None。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(_KB_SELECT + " WHERE k.is_default = 1 LIMIT 1")
@@ -172,6 +176,7 @@ def get_default_kb() -> Optional[dict]:
 # ==================== 知识库文档 ====================
 
 def _row_to_doc(row: dict) -> dict:
+    """把文档数据库行记录转换成文档信息字典（含格式化时间字段）。"""
     return {
         "id": row["id"],
         "kb_id": row["kb_id"],
@@ -196,6 +201,7 @@ def create_document(kb_id: int, filename: str, stored_path: str, file_ext: str,
                     file_size: int, file_md5: str, source: str = "upload",
                     uploader_id: Optional[int] = None, uploader_name: str = "",
                     status: str = "pending") -> dict:
+    """登记一条知识库文档记录并返回新文档的完整信息字典。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -212,6 +218,7 @@ def create_document(kb_id: int, filename: str, stored_path: str, file_ext: str,
 
 
 def get_document(doc_id: int) -> Optional[dict]:
+    """按文档ID查询文档信息，不存在返回 None。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM kb_documents WHERE id = %s", (doc_id,))
@@ -220,6 +227,7 @@ def get_document(doc_id: int) -> Optional[dict]:
 
 
 def list_documents(kb_id: int) -> list:
+    """列出指定知识库下的全部文档记录（按 ID 升序）。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -242,6 +250,7 @@ def find_document_by_md5(kb_id: int, file_md5: str) -> Optional[dict]:
 
 def update_document_status(doc_id: int, status: str, chunk_count: Optional[int] = None,
                            error_msg: str = "") -> None:
+    """更新文档的索引状态，可选同时更新分块数与错误信息。"""
     with get_db() as conn:
         cursor = conn.cursor()
         if chunk_count is not None:

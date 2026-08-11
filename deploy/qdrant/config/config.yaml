@@ -1,0 +1,15 @@
+# Qdrant 配置（覆盖默认）
+# 文档：https://qdrant.tech/documentation/configurations/
+
+storage:
+  storage_path: /qdrant/storage
+  # 记忆数据量不大，默认性能足够
+  
+service:
+  host: 0.0.0.0
+  http_port: 6333
+  max_workers: 4
+
+# 生产安全：可启用 API Key 鉴权
+#   设置环境变量 QDRANT__SERVICE__API_KEY=xxx
+#   并在 memory.yml 的 qdrant_url 后附加 ?api_key=xxx

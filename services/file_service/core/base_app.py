@@ -6,6 +6,8 @@
 - /api/health 健康检查
 - 日志初始化
 """
+import os
+
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Optional
 
@@ -35,6 +37,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        """应用生命周期：启动时执行 on_startup，关闭时执行 on_shutdown 并释放 Redis。"""
         logger.info(f"[{service_name}] 启动中...")
         if on_startup:
             await on_startup()
@@ -54,9 +57,17 @@ def create_app(
         redoc_url=None,
     )
 
+    # 允许跨域来源（环境变量 CORS_ALLOW_ORIGINS 逗号分隔；本地 Vite / 生产同源代理下不触发 CORS，
+    # 显式列表用于直连调试。禁止 ["*"] + credentials 组合）
+    _cors_origins = [
+        o.strip() for o in os.getenv(
+            "CORS_ALLOW_ORIGINS",
+            "http://localhost:5173,http://127.0.0.1:5173,https://www.rovio.online",
+        ).split(",") if o.strip()
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=_cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -64,6 +75,7 @@ def create_app(
 
     @app.get("/api/health")
     async def health():
+        """健康检查接口：返回服务状态及 Redis 连接情况。"""
         return {
             "status": "ok",
             "service": service_name,

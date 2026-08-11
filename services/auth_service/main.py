@@ -30,10 +30,31 @@ from core import (
     create_app, get_current_user, get_admin_user, get_client_ip,
     create_access_token, ServiceClient, logger,
 )
-from core.config import ADMIN_ALLOWED_IPS
+from core.jwt_auth import TOKEN_COOKIE_NAME
+from core.config import ADMIN_ALLOWED_IPS, JWT_TOKEN_EXPIRE_HOURS
 import models
 
 app = create_app("auth_service", version="1.0.0")
+
+
+def _is_https(request: Request) -> bool:
+    """判断请求是否走 HTTPS（生产经 nginx 时读 X-Forwarded-Proto）。"""
+    return (request.headers.get("X-Forwarded-Proto") or request.url.scheme) == "https"
+
+
+def _auth_response(content: dict, token: str, request: Request, status_code: int = 200) -> JSONResponse:
+    """生成带 HttpOnly 登录态 Cookie 的 JSON 响应（浏览器端自动携带，JS 不可读）。"""
+    resp = JSONResponse(content=content, status_code=status_code)
+    resp.set_cookie(
+        TOKEN_COOKIE_NAME,
+        token,
+        max_age=JWT_TOKEN_EXPIRE_HOURS * 3600,
+        httponly=True,
+        secure=_is_https(request),
+        samesite="lax",
+        path="/",
+    )
+    return resp
 
 
 # ==================== 请求体 ====================
@@ -73,6 +94,7 @@ class ResetPasswordRequest(BaseModel):
 
 @app.post("/api/auth/register")
 async def register(req: RegisterRequest, request: Request):
+    """用户注册：创建认证记录、生成 token 并同步创建用户资料。"""
     if not req.username or not req.password:
         return JSONResponse(status_code=400, content={"error": "用户名和密码不能为空"})
     if len(req.username) < 3 or len(req.username) > 50:
@@ -81,6 +103,7 @@ async def register(req: RegisterRequest, request: Request):
         return JSONResponse(status_code=400, content={"error": "密码长度不能少于 6 个字符"})
 
     def _create():
+        """在线程池里同步创建用户记录（避免阻塞事件循环）。"""
         return models.create_user(req.username, req.password, role="user")
     user = await asyncio.get_event_loop().run_in_executor(None, _create)
     if user is None:
@@ -101,7 +124,7 @@ async def register(req: RegisterRequest, request: Request):
     display_name = req.display_name or req.username
     await _create_user_profile(user["id"], display_name)
 
-    return JSONResponse(content={
+    return _auth_response({
         "token": token,
         "user": {
             "id": user["id"],
@@ -109,11 +132,12 @@ async def register(req: RegisterRequest, request: Request):
             "display_name": display_name,
             "role": "user",
         }
-    })
+    }, token, request)
 
 
 @app.post("/api/auth/login")
 async def login(req: LoginRequest, request: Request):
+    """用户登录：校验密码（含管理员 IP 白名单）后签发 token 并记录登录设备。"""
     if not req.username or not req.password:
         return JSONResponse(status_code=400, content={"error": "用户名和密码不能为空"})
 
@@ -139,7 +163,7 @@ async def login(req: LoginRequest, request: Request):
     # 合并 user_service 的 profile 数据（display_name / email / avatar_url）
     profile = await _get_user_profile(user["id"])
 
-    return JSONResponse(content={
+    return _auth_response({
         "token": token,
         "user": {
             "id": user["id"],
@@ -149,7 +173,21 @@ async def login(req: LoginRequest, request: Request):
             "avatar_url": profile.get("avatar_url", ""),
             "email": profile.get("email", ""),
         }
-    })
+    }, token, request)
+
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    """登出：清除 HttpOnly 登录态 Cookie。"""
+    resp = JSONResponse(content={"status": "ok"})
+    resp.delete_cookie(
+        TOKEN_COOKIE_NAME,
+        path="/",
+        httponly=True,
+        secure=_is_https(request),
+        samesite="lax",
+    )
+    return resp
 
 
 @app.get("/api/auth/me")
@@ -176,6 +214,7 @@ async def get_me(user: dict = Depends(get_current_user)):
 
 @app.get("/api/auth/recover/question")
 async def recover_get_question(username: str):
+    """获取找回密码所需的密保问题。"""
     info = await asyncio.get_event_loop().run_in_executor(None, models.get_security_question_by_username, username)
     if info is None:
         return JSONResponse(status_code=404, content={"error": "该账号未设置密保或不存在"})
@@ -184,6 +223,7 @@ async def recover_get_question(username: str):
 
 @app.post("/api/auth/recover/reset")
 async def recover_reset_password(req: RecoverResetRequest):
+    """通过密保答案验证后重置用户密码。"""
     if len(req.new_password) < 6:
         return JSONResponse(status_code=400, content={"error": "密码长度不能少于 6 个字符"})
     success = await asyncio.get_event_loop().run_in_executor(
@@ -198,6 +238,7 @@ async def recover_reset_password(req: RecoverResetRequest):
 
 @app.put("/api/user/password")
 async def change_password(req: ChangePasswordRequest, user: dict = Depends(get_current_user)):
+    """修改当前登录用户的密码（需校验原密码）。"""
     if len(req.new_password) < 6:
         return JSONResponse(status_code=400, content={"error": "密码长度不能少于 6 个字符"})
     if req.old_password == req.new_password:
@@ -212,6 +253,7 @@ async def change_password(req: ChangePasswordRequest, user: dict = Depends(get_c
 
 @app.put("/api/user/security-question")
 async def set_security_question(req: SecurityQuestionRequest, user: dict = Depends(get_current_user)):
+    """设置当前登录用户的密保问题与答案。"""
     if len(req.question.strip()) < 4:
         return JSONResponse(status_code=400, content={"error": "密保问题至少 4 个字符"})
     if len(req.answer.strip()) < 1:
@@ -228,6 +270,7 @@ async def set_security_question(req: SecurityQuestionRequest, user: dict = Depen
 
 @app.get("/api/user/devices")
 async def list_devices(user: dict = Depends(get_current_user)):
+    """获取当前用户的登录设备列表（标注当前使用的设备）。"""
     devices = await asyncio.get_event_loop().run_in_executor(None, models.get_login_devices, user["id"])
     current_token = user.get("device_token", "")
     for d in devices:
@@ -237,6 +280,7 @@ async def list_devices(user: dict = Depends(get_current_user)):
 
 @app.delete("/api/user/devices/{device_id}")
 async def revoke_device(device_id: int, user: dict = Depends(get_current_user)):
+    """撤销指定登录设备。"""
     success = await asyncio.get_event_loop().run_in_executor(
         None, models.revoke_login_device, user["id"], device_id
     )
@@ -247,6 +291,7 @@ async def revoke_device(device_id: int, user: dict = Depends(get_current_user)):
 
 @app.post("/api/user/devices/revoke-all-others")
 async def revoke_all_others(user: dict = Depends(get_current_user)):
+    """撤销当前设备以外的所有登录设备。"""
     current_token = user.get("device_token", "")
     if not current_token:
         return JSONResponse(status_code=400, content={"error": "无法识别当前设备"})
@@ -298,6 +343,7 @@ async def internal_reset_password(user_id: int, req: ResetPasswordRequest):
 
 @app.get("/internal/auth/users/{user_id}/role")
 async def internal_get_role(user_id: int):
+    """供其他服务查询用户角色。"""
     role = await asyncio.get_event_loop().run_in_executor(None, models.get_user_role, user_id)
     if role is None:
         return JSONResponse(status_code=404, content={"error": "用户不存在"})

@@ -48,10 +48,12 @@ _DB_NAMES = {
 
 
 def get_db_name(svc: str) -> str:
+    """按服务名返回对应的数据库名（未配置时按 lc_<svc> 兜底）。"""
     return _DB_NAMES.get(svc, f"lc_{svc}")
 
 
 def get_mysql_config(svc: str = None) -> dict:
+    """生成 MySQL 连接配置（可选指定目标库名，svc 为空则不指定库）。"""
     cfg = {
         "host": MYSQL_HOST,
         "port": MYSQL_PORT,
@@ -70,6 +72,7 @@ logger = logging.getLogger("migrate")
 
 
 def set_service_name(name: str):
+    """兼容占位函数：迁移脚本不写文件日志，无需设置服务名。"""
     pass
 
 OLD_DB = "agent_records"
@@ -92,12 +95,14 @@ def _admin_connect(database: str = None):
 
 
 def _exec(cursor, sql: str, params=None, log: bool = True):
+    """执行 SQL（可选打印调试日志，params 为 SQL 参数）。"""
     if log:
         logger.debug(f"[migrate] {sql[:120]}")
     cursor.execute(sql, params)
 
 
 def _safe_add_column(cursor, table: str, column: str, definition: str):
+    """安全给表添加列：列已存在时静默跳过不报错。"""
     try:
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
     except Exception:
@@ -105,6 +110,7 @@ def _safe_add_column(cursor, table: str, column: str, definition: str):
 
 
 def _safe_add_index(cursor, table: str, index_name: str, columns: str):
+    """安全创建索引：索引已存在时静默跳过不报错。"""
     try:
         cursor.execute(f"CREATE INDEX {index_name} ON {table} ({columns})")
     except Exception:
@@ -645,6 +651,7 @@ def check_only():
 
 
 def main():
+    """脚本入口：解析命令行参数，执行迁移（默认）或仅检查（--check）。"""
     parser = argparse.ArgumentParser(description="微服务数据库迁移")
     parser.add_argument("--check", action="store_true", help="仅检查不执行迁移")
     args = parser.parse_args()

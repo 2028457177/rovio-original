@@ -60,6 +60,8 @@
   /* —— 字体 —— */
   --font-display: 'Noto Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
   --font-body: 'Manrope', system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  /* 哥特展示字：英文 Blackletter + 中文思源宋体重粗，近似哥特气质 */
+  --font-gothic: 'UnifrakturMaguntia', 'Noto Serif SC', 'Songti SC', 'STSong', serif;
 
   /* 安全区域 */
   --safe-top: env(safe-area-inset-top, 0px);

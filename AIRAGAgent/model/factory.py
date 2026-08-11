@@ -11,11 +11,13 @@ from AIRAGAgent.utils.config_handler import rag_conf
 class BaseModelFactory(ABC):
     @abstractmethod
     def generator(self) -> Optional[Embeddings | BaseChatModel]:
+        """抽象接口：由子类实现生成具体的模型实例。"""
         pass
 
 
 class ChatModelFactory(BaseModelFactory):
     def generator(self) -> Optional[Embeddings | BaseChatModel]:
+        """创建对话模型实例：DeepSeek 用 ChatDeepSeek，其他用 ChatTongyi。"""
         model_name = rag_conf["chat_model_name"]
         api_key = rag_conf["api_key"]
 
@@ -28,6 +30,7 @@ class ChatModelFactory(BaseModelFactory):
 
 class EmbeddingsFactory(BaseModelFactory):
     def generator(self) -> Optional[Embeddings | BaseChatModel]:
+        """创建并返回嵌入模型实例，API Key支持独立配置或回退共享Key。"""
         # 嵌入模型支持独立 API Key（embedding_api_key），
         # 缺省回退共享 api_key —— 例如 DeepSeek 对话 key 与 DashScope 嵌入 key 不同的场景
         api_key = rag_conf.get("embedding_api_key") or rag_conf["api_key"]

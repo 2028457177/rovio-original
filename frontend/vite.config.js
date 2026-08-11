@@ -34,7 +34,6 @@ function microserviceProxy() {
     '/api/tasks':                             { target: 'http://localhost:8003', changeOrigin: true },
     '/api/plan':                              { target: 'http://localhost:8003', changeOrigin: true },
     '/api/plans':                             { target: 'http://localhost:8003', changeOrigin: true },
-    '/api/subagents':                         { target: 'http://localhost:8003', changeOrigin: true },
 
     // ── kb_service :8004 —— 知识库 ──
     '/api/admin/kb':                          { target: 'http://localhost:8004', changeOrigin: true },

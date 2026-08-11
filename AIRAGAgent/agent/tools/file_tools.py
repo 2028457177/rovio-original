@@ -133,6 +133,7 @@ def _collect_all_tags(doc: Document) -> set:
     hints = set()
 
     def _scan(paragraphs):
+        """扫描段落文本，收集所有标签的内容提示。"""
         for p in paragraphs:
             for m in TAG_PATTERN.finditer(p.text):
                 hints.add(m.group(1))

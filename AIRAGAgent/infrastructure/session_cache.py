@@ -9,10 +9,12 @@ SESSION_TTL = int(redis_conf.get("session_cache", {}).get("ttl", 3600))
 
 
 def _session_key(user_id: int, session_id: str) -> str:
+    """拼出 Redis 中会话缓存的键名。"""
     return f"{SESSION_KEY_PREFIX}{user_id}:{session_id}"
 
 
 def cache_session_messages(user_id: int, session_id: str, messages: List[Dict[str, str]]) -> bool:
+    """将指定会话的消息列表写入Redis缓存并设置有效期，成功返回True。"""
     if not is_redis_available():
         return False
     try:
@@ -28,6 +30,7 @@ def cache_session_messages(user_id: int, session_id: str, messages: List[Dict[st
 
 
 def get_cached_session(user_id: int, session_id: str) -> Optional[List[Dict[str, str]]]:
+    """从 Redis 读取指定会话的缓存消息，命中时刷新有效期。"""
     if not is_redis_available():
         return None
     try:
@@ -46,6 +49,7 @@ def get_cached_session(user_id: int, session_id: str) -> Optional[List[Dict[str,
 
 
 def invalidate_session(user_id: int, session_id: str) -> bool:
+    """删除指定会话的缓存数据，删除成功返回True。"""
     if not is_redis_available():
         return False
     try:
@@ -60,6 +64,7 @@ def invalidate_session(user_id: int, session_id: str) -> bool:
 
 
 def refresh_session_ttl(user_id: int, session_id: str) -> bool:
+    """刷新指定会话缓存的有效期（若缓存存在），成功返回True。"""
     if not is_redis_available():
         return False
     try:

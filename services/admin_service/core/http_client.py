@@ -28,6 +28,7 @@ class ServiceClient:
     """
 
     def __init__(self, service: str, token: Optional[str] = None, timeout: float = DEFAULT_TIMEOUT):
+        """初始化客户端：记录目标服务名、base_url、token 与超时时间。"""
         self.service = service
         self.base_url = get_service_url(service)
         self.token = token
@@ -35,6 +36,7 @@ class ServiceClient:
         self._client: Optional[httpx.AsyncClient] = None
 
     async def __aenter__(self):
+        """异步上下文进入：创建 httpx 异步客户端并返回自身。"""
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=self.timeout,
@@ -43,11 +45,13 @@ class ServiceClient:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        """退出 async with 上下文时关闭 httpx 异步客户端。"""
         if self._client:
             await self._client.aclose()
         self._client = None
 
     def _build_headers(self) -> dict:
+        """构造请求头：携带 Bearer token 与内部调用标记。"""
         h = {"Content-Type": "application/json"}
         if self.token:
             h["Authorization"] = f"Bearer {self.token}"
@@ -56,18 +60,23 @@ class ServiceClient:
         return h
 
     async def get(self, path: str, **kwargs) -> httpx.Response:
+        """发送 GET 请求并返回响应。"""
         return await self._request("GET", path, **kwargs)
 
     async def post(self, path: str, **kwargs) -> httpx.Response:
+        """发送 POST 请求并返回响应。"""
         return await self._request("POST", path, **kwargs)
 
     async def put(self, path: str, **kwargs) -> httpx.Response:
+        """发送 PUT 请求并返回响应。"""
         return await self._request("PUT", path, **kwargs)
 
     async def patch(self, path: str, **kwargs) -> httpx.Response:
+        """发送 PATCH 请求并返回响应。"""
         return await self._request("PATCH", path, **kwargs)
 
     async def delete(self, path: str, **kwargs) -> httpx.Response:
+        """发送 DELETE 请求并返回响应。"""
         return await self._request("DELETE", path, **kwargs)
 
     async def request(self, method: str, path: str, **kwargs) -> httpx.Response:
@@ -75,6 +84,7 @@ class ServiceClient:
         return await self._request(method.upper(), path, **kwargs)
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """实际发起 HTTP 请求：校验客户端已创建，网络异常时记录日志并重新抛出。"""
         if not self._client:
             raise RuntimeError("ServiceClient 必须在 async with 上下文中使用")
         try:

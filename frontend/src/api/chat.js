@@ -1,14 +1,10 @@
-import { getToken, logout } from './auth.js'
+import { logout } from './auth.js'
 
 const API_BASE = '/api'
 
 function authHeaders(extra = {}) {
-  const token = getToken()
-  const headers = { ...extra }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
+  // JWT 存于 HttpOnly Cookie，同源请求自动携带
+  return { ...extra }
 }
 
 export async function uploadWordFile(file) {
@@ -29,12 +25,13 @@ export async function uploadWordFile(file) {
   return response.json()
 }
 
-export async function sendChatMessage(message, sessionId, latitude, longitude, onThinking, onOutput, onThinkingEnd, onError, onDone, uploadedFilePath = '', signal = null, truncateTo = null, onMessageIds = null, onEvent = null) {
+export async function sendChatMessage(message, sessionId, latitude, longitude, onThinking, onOutput, onThinkingEnd, onError, onDone, uploadedFilePath = '', signal = null, truncateTo = null, onMessageIds = null, onEvent = null, searchEnabled = true) {
   try {
     const body = {
       message,
       session_id: sessionId,
-      stream: true
+      stream: true,
+      search_enabled: searchEnabled
     }
     if (latitude != null && longitude != null) {
       body.latitude = latitude
@@ -242,14 +239,4 @@ export async function fetchPlanDetailApi(planId) {
   if (!response.ok) throw new Error(`加载计划详情失败: ${response.status}`)
   const data = await response.json()
   return data.plan || null
-}
-
-/**
- * Agent（SubAgent）能力清单
- */
-export async function fetchSubagentsApi() {
-  const response = await fetch(`${API_BASE}/subagents`, { headers: authHeaders() })
-  if (!response.ok) throw new Error(`加载 Agent 清单失败: ${response.status}`)
-  const data = await response.json()
-  return data.subagents || []
 }

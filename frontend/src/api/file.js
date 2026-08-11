@@ -1,14 +1,10 @@
-import { getToken, logout } from './auth.js'
+import { logout } from './auth.js'
 
 const API_BASE = '/api'
 
 function authHeaders(extra = {}) {
-  const token = getToken()
-  const headers = { ...extra }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
+  // JWT 存于 HttpOnly Cookie，同源请求自动携带
+  return { ...extra }
 }
 
 /** 列出 AI 工作区目录内容 */
@@ -29,8 +25,7 @@ export async function listWorkspace(path = '') {
 /** 触发文件下载（浏览器直接下载到本地） */
 export function downloadWorkspaceFile(path) {
   const url = `${API_BASE}/file/download?path=${encodeURIComponent(path)}`
-  const token = getToken()
-  // fetch 带 Authorization 头拿 blob，再触发下载
+  // fetch 带 cookie 拿 blob（HttpOnly Cookie 自动携带），再触发下载
   fetch(url, { headers: authHeaders() })
     .then(r => {
       if (!r.ok) throw new Error(`下载失败 (${r.status})`)

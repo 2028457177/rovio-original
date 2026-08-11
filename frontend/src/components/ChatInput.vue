@@ -2,7 +2,7 @@
   <div class="chat-input-area" :class="{ 'center-mode': centerMode }">
     <div class="input-glow" :class="{ active: isFocused }"></div>
     <div class="chat-input-wrapper">
-      <div class="chat-input-box glass" :class="{ focused: isFocused, 'has-file': uploadedFileName }" @mousemove="onSpotlightMove">
+      <div class="chat-input-box" :class="{ focused: isFocused, streaming: isStreaming, 'has-file': uploadedFileName }" @mousemove="onSpotlightMove">
         <!-- 已上传文件提示 -->
         <Transition name="file-tag">
           <div v-if="uploadedFileName" class="uploaded-file-tag">
@@ -38,7 +38,7 @@
           ref="inputRef"
           v-model="inputText"
           :disabled="disabled"
-          placeholder="输入你的问题，Enter 发送，Shift+Enter 换行…"
+          placeholder="输入你的问题…"
           rows="1"
           @input="autoResize"
           @keydown="handleKeydown"
@@ -70,6 +70,25 @@
         </button>
       </div>
     </div>
+
+    <!-- 底部工具行：左侧联网搜索开关，右侧快捷键提示 -->
+    <div class="chat-input-tools">
+      <button
+        type="button"
+        class="search-toggle"
+        :class="{ on: searchEnabled }"
+        @click="emit('toggleSearch')"
+        title="联网搜索开关：关闭后 AI 不再上网检索"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <span>{{ searchEnabled ? '联网搜索已开启' : '联网搜索已关闭' }}</span>
+        <span class="toggle-knob" aria-hidden="true"><span class="knob-dot"></span></span>
+      </button>
+      <span class="input-hints" aria-hidden="true">Enter 发送 · Shift+Enter 换行</span>
+    </div>
   </div>
 </template>
 
@@ -89,10 +108,14 @@ const props = defineProps({
   isStreaming: {
     type: Boolean,
     default: false
+  },
+  searchEnabled: {
+    type: Boolean,
+    default: true
   }
 })
 
-const emit = defineEmits(['send', 'stop'])
+const emit = defineEmits(['send', 'stop', 'toggleSearch'])
 
 const inputText = ref('')
 const inputRef = ref(null)
@@ -190,10 +213,8 @@ function handleStop() {
 
 <style scoped>
 .chat-input-area {
-  padding: 14px 24px 22px;
-  background: var(--glass);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  padding: 18px 24px 20px;
+  background: linear-gradient(180deg, transparent, var(--panel) 30%);
   border-top: 1px solid var(--border-light);
   flex-shrink: 0;
   position: relative;
@@ -225,16 +246,17 @@ function handleStop() {
 .chat-input-box {
   flex: 1;
   position: relative;
-  border-radius: var(--radius-lg);
-  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition), background var(--transition);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   background: var(--panel);
-  box-shadow: 0 6px 24px var(--shadow-sm);
+  box-shadow: 0 2px 12px var(--shadow-sm);
   overflow: hidden;
 }
 
+/* 鼠标跟随墨晕 */
 .chat-input-box::before {
   content: '';
   position: absolute;
@@ -242,11 +264,40 @@ function handleStop() {
   pointer-events: none;
   opacity: 0;
   background: radial-gradient(
-    480px circle at var(--sx, 50%) var(--sy, 50%),
-    rgba(var(--accent-rgb), 0.07),
+    420px circle at var(--sx, 50%) var(--sy, 50%),
+    rgba(var(--accent-rgb), 0.05),
     transparent 45%
   );
   transition: opacity 0.3s ease;
+}
+
+/* 已挂载文件：边框微微提亮 */
+.chat-input-box.has-file {
+  border-color: rgba(var(--accent-rgb), 0.3);
+}
+
+/* 流式生成中：顶部墨线扫过 + 边框轻染 */
+.chat-input-box.streaming {
+  border-color: rgba(var(--accent-rgb), 0.22);
+}
+
+.chat-input-box.streaming::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.55), transparent);
+  animation: input-streaming 1.5s var(--ease-out-expo) infinite;
+  pointer-events: none;
+}
+
+@keyframes input-streaming {
+  0% { transform: translateX(-40%); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateX(240%); opacity: 0; }
 }
 
 .chat-input-box.focused::before {
@@ -254,24 +305,24 @@ function handleStop() {
 }
 
 .chat-input-box.focused {
-  border-color: rgba(var(--accent-rgb), 0.45);
+  border-color: rgba(var(--accent-rgb), 0.5);
   box-shadow:
-    0 0 0 3.5px rgba(var(--accent-rgb), 0.1),
-    0 10px 34px var(--shadow-sm);
+    0 0 0 3px rgba(var(--accent-rgb), 0.07),
+    0 12px 34px var(--shadow-sm);
 }
 
 .chat-input-box textarea {
   width: 100%;
   border: none;
   background: transparent;
-  padding: 15px 56px 15px 52px;
+  padding: 16px 60px 16px 50px;
   font-size: 14.5px;
   font-family: inherit;
   resize: none;
   outline: none;
   color: var(--text);
-  line-height: 1.55;
-  min-height: 48px;
+  line-height: 1.6;
+  min-height: 50px;
   max-height: 200px;
 }
 
@@ -284,11 +335,11 @@ function handleStop() {
   cursor: not-allowed;
 }
 
-/* —— 发送按钮 —— */
+/* —— 发送按钮：墨色圆钮，整框唯一重色 —— */
 .send-btn {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 9px;
+  bottom: 9px;
   width: 38px;
   height: 38px;
   border-radius: 50%;
@@ -301,7 +352,7 @@ function handleStop() {
   justify-content: center;
   transition: transform var(--spring-fast), box-shadow var(--spring-fast), filter var(--transition), background var(--transition), opacity var(--transition);
   flex-shrink: 0;
-  box-shadow: 0 5px 16px rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.28);
   z-index: 2;
   overflow: hidden;
 }
@@ -355,35 +406,34 @@ function handleStop() {
   transform: scale(0.92);
 }
 
-/* —— 附件按钮 —— */
+/* —— 附件按钮：无边框图标，hover 浮现墨圈 —— */
 .file-input-hidden {
   display: none;
 }
 
 .attach-btn {
   position: absolute;
-  left: 10px;
-  bottom: 10px;
-  width: 34px;
-  height: 34px;
+  left: 8px;
+  bottom: 8px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   color: var(--text-muted);
   background: transparent;
-  border: 1px solid var(--border);
+  border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color var(--transition), border-color var(--transition), background var(--transition), transform var(--spring-fast);
+  transition: color var(--transition), background var(--transition), transform var(--spring-fast);
   flex-shrink: 0;
   z-index: 2;
 }
 
 .attach-btn:hover:not(:disabled) {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.45);
+  color: var(--text);
   background: var(--accent-light);
-  transform: rotate(-12deg) scale(1.05);
+  transform: scale(1.08);
 }
 
 .attach-btn:disabled {
@@ -392,7 +442,6 @@ function handleStop() {
 }
 
 .attach-btn.uploading {
-  border-color: rgba(var(--accent-rgb), 0.45);
   color: var(--accent);
 }
 
@@ -467,16 +516,91 @@ function handleStop() {
   transform: translateY(8px) scale(0.94);
 }
 
+/* —— 底部工具行 —— */
+.chat-input-tools {
+  max-width: 860px;
+  margin: 0 auto;
+  padding-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.input-hints {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+  user-select: none;
+  opacity: 0.85;
+}
+
+.search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
+}
+
+.search-toggle:hover {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+
+.search-toggle.on {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: var(--accent-light);
+}
+
+.toggle-knob {
+  width: 26px;
+  height: 15px;
+  border-radius: 10px;
+  background: var(--border-strong, var(--border));
+  position: relative;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+
+.search-toggle.on .toggle-knob {
+  background: var(--accent);
+}
+
+.knob-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--spring-fast);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.search-toggle.on .knob-dot {
+  transform: translateX(11px);
+}
+
 /* —— 居中模式（欢迎页） —— */
 .chat-input-area.center-mode {
   padding: 0;
   background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
   border-top: none;
 }
 
 .chat-input-area.center-mode .chat-input-box {
+  border-radius: var(--radius-lg);
   box-shadow: 0 10px 36px var(--shadow-sm);
 }
 
@@ -490,14 +614,20 @@ function handleStop() {
     0 16px 48px var(--shadow);
 }
 
+.chat-input-area.center-mode .chat-input-tools {
+  justify-content: flex-end;
+}
+
+.chat-input-area.center-mode .input-hints {
+  display: none;
+}
+
 @media (max-width: 767px) {
   .chat-input-area {
-    padding: 8px 12px;
-    padding-bottom: calc(8px + var(--safe-bottom));
+    padding: 10px 12px;
+    padding-bottom: calc(10px + var(--safe-bottom));
     background: var(--panel);
     border-top: 0.5px solid var(--border-light);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
   }
 
   .input-glow {
@@ -509,9 +639,9 @@ function handleStop() {
   }
 
   .chat-input-box {
-    border-radius: 24px;
+    border-radius: 18px;
     border: 1px solid var(--border);
-    background: var(--glass-light);
+    background: var(--panel);
     box-shadow: none;
   }
 
@@ -541,8 +671,8 @@ function handleStop() {
   }
 
   .attach-btn {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     left: 7px;
     bottom: 7px;
   }

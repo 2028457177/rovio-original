@@ -113,6 +113,7 @@ def _rebuild_all_kbs() -> None:
 
 
 def _get_splitter():
+    """按 chroma.yml 分块配置创建递归字符文本分割器并返回。"""
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     return RecursiveCharacterTextSplitter(
         chunk_size=chroma_conf["chunk_size"],
@@ -123,6 +124,7 @@ def _get_splitter():
 
 
 def allowed_file_types() -> tuple:
+    """返回知识库允许上传的文件扩展名元组（来自配置）。"""
     return tuple(chroma_conf.get("allow_knowledge_file_type", ["pdf", "txt", "xls", "xlsx"]))
 
 
@@ -140,6 +142,7 @@ def _load_file_documents(abs_path: str) -> list[Document]:
 
 
 def _invalidate_cache():
+    """清除 RAG 缓存（知识库变更后调用，保证检索结果不过期）。"""
     try:
         from AIRAGAgent.infrastructure.rag_cache import invalidate_rag_cache
         invalidate_rag_cache()
@@ -242,6 +245,7 @@ def rebuild_kb(kb_id: int) -> int:
 
 
 def rebuild_kb_async(kb_id: int) -> None:
+    """在后台线程中重建指定知识库索引，调用后立即返回。"""
     t = threading.Thread(target=rebuild_kb, args=(kb_id,), daemon=True,
                          name=f"kb-rebuild-{kb_id}")
     t.start()

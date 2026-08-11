@@ -1,0 +1,282 @@
+# ====== lc-course 全栈容器编排 ======
+# 用法：
+#   cp .env.docker.example .env  并填入 API Key
+#   docker compose up -d --build
+#   docker compose logs -f frontend
+# 首次启动 migrator 会先于应用跑 alembic baseline（建表）。
+#
+# 服务端口（容器内）：
+#   auth 8001  user 8002  chat 8003  kb 8004  admin 8005  file 8006  frontend 80
+
+# 公共环境变量锚点：MySQL/Redis/JWT/LLM keys，所有后端服务共享
+x-common-env: &common-env
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_USER: ${MYSQL_USER:-root}
+  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lc123456}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-lc-course-secret-key-2025}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  GAODE_API_KEY: ${GAODE_API_KEY:-}
+  OPENAI_EMBEDDING_API_KEY: ${OPENAI_EMBEDDING_API_KEY:-}
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  LANGSMITH_API_KEY: ${LANGSMITH_API_KEY:-}
+  LANGSMITH_TRACING: ${LANGSMITH_TRACING:-false}
+  LANGSMITH_PROJECT: ${LANGSMITH_PROJECT:-lc-course}
+
+# 后端服务公共锚点：构建参数 + 依赖 + 健康检查模板
+x-backend-defaults: &backend-defaults
+  depends_on:
+    migrator:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # ───────────────────────── MySQL ─────────────────────────
+  mysql:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-lc123456}
+    volumes:
+      - lc-mysql:/var/lib/mysql
+      - ./deploy/docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-lc123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # ───────────────────────── Redis ─────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - lc-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ───────────────────────── 迁移执行器 ─────────────────────────
+  # 一次性服务：对 5 个库跑 alembic upgrade head，成功后应用才启动
+  migrator:
+    build:
+      context: .
+      dockerfile: deploy/docker/migrator.Dockerfile
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-lc123456}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  # ───────────────────────── auth_service :8001 ─────────────────────────
+  auth_service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-light
+      args:
+        SERVICE: auth_service
+        SERVICE_PORT: "8001"
+    image: lc-course/auth-service:latest
+    environment:
+      <<: *common-env
+      DB_NAME: lc_auth
+      PORT: "8001"
+      USER_SERVICE_URL: http://user_service:8002
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ───────────────────────── user_service :8002 ─────────────────────────
+  user_service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-light
+      args:
+        SERVICE: user_service
+        SERVICE_PORT: "8002"
+    image: lc-course/user-service:latest
+    environment:
+      <<: *common-env
+      DB_NAME: lc_user
+      PORT: "8002"
+      AUTH_SERVICE_URL: http://auth_service:8001
+      CHAT_SERVICE_URL: http://chat_service:8003
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - lc-uploads:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8002/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ───────────────────────── chat_service :8003（依赖 AIRAGAgent + Playwright）─────────────────────────
+  chat_service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-agent
+      args:
+        SERVICE: chat_service
+        SERVICE_PORT: "8003"
+    image: lc-course/chat-service:latest
+    environment:
+      <<: *common-env
+      DB_NAME: lc_chat
+      PORT: "8003"
+      USER_SERVICE_URL: http://user_service:8002
+      # 与 AIRAGAgent/utils/paths.py 的 PROJECT_ROOT(/app) 对齐，统一落到挂载卷
+      UPLOAD_DIR: /app/uploads
+      WORKSPACE_DIR: /app/workspace
+      LOG_DIR: /app/logs
+      CHROMA_PERSIST_DIRECTORY: /app/chroma_ab
+    volumes:
+      - lc-workspace:/app/workspace
+      - lc-uploads:/app/uploads
+      - lc-chroma-chat:/app/chroma_ab
+      - lc-logs:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8003/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ───────────────────────── kb_service :8004（依赖 AIRAGAgent + Playwright）─────────────────────────
+  kb_service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-agent
+      args:
+        SERVICE: kb_service
+        SERVICE_PORT: "8004"
+    image: lc-course/kb-service:latest
+    environment:
+      <<: *common-env
+      DB_NAME: lc_kb
+      PORT: "8004"
+      UPLOAD_DIR: /app/uploads
+      WORKSPACE_DIR: /app/workspace
+      LOG_DIR: /app/logs
+      CHROMA_PERSIST_DIRECTORY: /app/chroma_ab
+    volumes:
+      - lc-workspace-kb:/app/workspace
+      - lc-uploads:/app/uploads
+      - lc-chroma-kb:/app/chroma_ab
+      - lc-logs-kb:/app/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8004/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ───────────────────────── admin_service :8005 ─────────────────────────
+  admin_service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-light
+      args:
+        SERVICE: admin_service
+        SERVICE_PORT: "8005"
+    image: lc-course/admin-service:latest
+    environment:
+      <<: *common-env
+      DB_NAME: lc_admin
+      PORT: "8005"
+      AUTH_SERVICE_URL: http://auth_service:8001
+      USER_SERVICE_URL: http://user_service:8002
+      CHAT_SERVICE_URL: http://chat_service:8003
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8005/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ───────────────────────── file_service :8006 ─────────────────────────
+  file_service:
+    <<: *backend-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: code-light
+      args:
+        SERVICE: file_service
+        SERVICE_PORT: "8006"
+    image: lc-course/file-service:latest
+    environment:
+      <<: *common-env
+      PORT: "8006"
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - lc-uploads:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8006/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ───────────────────────── 前端 nginx :80 ─────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: lc-course/frontend:latest
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      auth_service:
+        condition: service_started
+      user_service:
+        condition: service_started
+      chat_service:
+        condition: service_started
+      kb_service:
+        condition: service_started
+      admin_service:
+        condition: service_started
+      file_service:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  lc-mysql:
+  lc-redis:
+  lc-uploads:
+  lc-workspace:
+  lc-workspace-kb:
+  lc-chroma-chat:
+  lc-chroma-kb:
+  lc-logs:
+  lc-logs-kb:

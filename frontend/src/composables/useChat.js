@@ -29,6 +29,23 @@ const isSearching = ref(false)
 
 const defaultSessionId = ref(generateSessionId())
 let conversationsLoaded = false
+// 任务队列执行期间保持欢迎页（消息照常累积但不切换到对话视图）
+const keepWelcome = ref(false)
+
+// 联网搜索开关（模块级单例，localStorage 持久化，默认开启）
+// 关闭后后端 Planner 不会选择 search 子代理
+let _initialSearchEnabled = true
+try {
+  _initialSearchEnabled = localStorage.getItem('searchEnabled') !== '0'
+} catch {}
+const searchEnabled = ref(_initialSearchEnabled)
+
+function toggleSearch() {
+  searchEnabled.value = !searchEnabled.value
+  try {
+    localStorage.setItem('searchEnabled', searchEnabled.value ? '1' : '0')
+  } catch {}
+}
 
 export function useChat() {
   const currentConversation = computed(() => {
@@ -73,7 +90,7 @@ export function useChat() {
     return !!pending && pending.isThinking
   })
 
-  const showWelcome = computed(() => messages.value.length === 0)
+  const showWelcome = computed(() => messages.value.length === 0 || keepWelcome.value)
 
   /**
    * 排序后的会话列表：置顶 → 收藏 → 普通会话，组内按更新时间倒序。
@@ -150,11 +167,11 @@ export function useChat() {
    *  - truncateTo: 重新生成 / 编辑重发时，告知后端把会话历史回滚到保留最早的 N 条
    */
   async function sendMessage(message, uploadedFilePath = '', options = {}) {
-    const { isRegenerate = false, replaceAssistantId = null, onDone = null, messageText: explicitText = null, truncateTo = null } = options
+    const { isRegenerate = false, replaceAssistantId = null, onDone = null, onError = null, onAbort = null, messageText: explicitText = null, truncateTo = null, sessionIdOverride = null } = options
 
     if (!isRegenerate && !message.trim() && !uploadedFilePath) return
 
-    const requestSessionId = sessionId.value
+    const requestSessionId = sessionIdOverride || sessionId.value
     if (pendingStreams.value.has(requestSessionId)) return
 
     error.value = ''
@@ -268,6 +285,7 @@ export function useChat() {
               }
             })
           }
+          if (onError) try { onError(typeof err === 'string' ? err : (err?.message || String(err))) } catch {}
         },
         (finalContent) => {
           assistantMsg.content = finalContent
@@ -337,7 +355,9 @@ export function useChat() {
             assistantMsg.steps[idx].status = 'failed'
             assistantMsg.steps[idx].error = event.error || ''
           }
-        }
+        },
+        // 联网搜索开关：false 时后端 Planner 不选 search 子代理
+        searchEnabled.value
       )
     } catch (e) {
       assistantMsg.streaming = false
@@ -351,6 +371,7 @@ export function useChat() {
       // 中止（用户主动停止）不算错误
       if (e?.name === 'AbortError') {
         // 保留已生成内容
+        if (onAbort) try { onAbort() } catch {}
         return
       }
 
@@ -367,6 +388,7 @@ export function useChat() {
           }
         }
       })
+      if (onError) try { onError(e.message || String(e)) } catch {}
     }
   }
 
@@ -688,6 +710,7 @@ export function useChat() {
     currentConversationId.value = conversationId
     error.value = ''
     errorInfo.value = null
+    keepWelcome.value = false  // 切换会话时显示对话内容
   }
 
   async function loadConversations(force = false) {
@@ -773,6 +796,7 @@ export function useChat() {
     streamingContent,
     thinkingContent,
     showWelcome,
+    keepWelcome,
     conversations,
     visibleConversations,
     currentConversationId,
@@ -780,9 +804,12 @@ export function useChat() {
     searchKeyword,
     searchResults,
     isSearching,
+    pendingStreams,
+    searchEnabled,
     // actions
     sendMessage,
     stopStreaming,
+    toggleSearch,
     regenerateMessage,
     editAndResend,
     branchFromMessage,

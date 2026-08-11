@@ -97,6 +97,7 @@ def on_rate_limited(payload: dict) -> None:
 
 
 async def on_startup() -> None:
+    """服务启动时订阅三个事件频道（chat 完成/工具调用/限流）。"""
     stop_event.clear()
     subscribe_events(CHANNEL_CHAT_COMPLETED, on_chat_completed, stop_event)
     subscribe_events(CHANNEL_TOOL_CALLED, on_tool_called, stop_event)
@@ -105,6 +106,7 @@ async def on_startup() -> None:
 
 
 async def on_shutdown() -> None:
+    """服务关闭时通知事件订阅循环退出。"""
     stop_event.set()
     logger.info("[admin] 已请求停止事件订阅")
 
@@ -148,6 +150,7 @@ async def admin_get_users(request: Request, admin: dict = Depends(get_admin_user
 
     # 批量调 user_service 补全 display_name / avatar_url / email
     async def _fill(u: dict):
+        """为单个用户补全 display_name / avatar_url / email 资料字段。"""
         uid = u.get("id")
         r = await call_service("user", "GET", f"/internal/user/profile?user_id={uid}", token=token)
         if "error" in r:

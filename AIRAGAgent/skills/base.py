@@ -21,6 +21,7 @@ class Skill:
     workflow_hint: str = ""                       # 工具调用顺序提示，如 "get_user_location → get_city_code → get_weather"
 
     def __hash__(self):
+        """以skill名称计算哈希值。"""
         return hash(self.name)
 
 
@@ -32,6 +33,7 @@ class SkillRegistry:
     _instance: Optional["SkillRegistry"] = None
 
     def __new__(cls):
+        """单例模式：保证全局只存在一个技能注册中心实例。"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._skills: Dict[str, Skill] = {}
@@ -54,9 +56,11 @@ class SkillRegistry:
         return "\n".join(lines)
 
     def get_skill(self, name: str) -> Optional[Skill]:
+        """按名称获取已注册的 Skill，不存在返回 None。"""
         return self._skills.get(name)
 
     def get_all_skills(self) -> Dict[str, Skill]:
+        """返回所有已注册Skill的字典副本。"""
         return dict(self._skills)
 
     def get_all_tools(self) -> List[Callable]:
@@ -84,9 +88,11 @@ class SkillRegistry:
         return skill.system_prompt
 
     def deactivate_all(self):
+        """清空所有已激活的 Skill。"""
         self._active_skills.clear()
 
     def is_active(self, skill_name: str) -> bool:
+        """判断指定名称的Skill当前是否处于激活状态。"""
         return skill_name in self._active_skills
 
     def get_active_prompts(self) -> str:

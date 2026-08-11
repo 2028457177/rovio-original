@@ -58,6 +58,7 @@ def monitor_tool(
         request: ToolCallRequest,
         handler: Callable[[ToolCallRequest], ToolMessage | Command]
 ) -> ToolMessage | Command:
+    """工具调用监控：先做限流检查，再记录调用日志，执行工具并记录成功或失败结果。"""
     tool_name = request.tool_call['name']
     limiter = get_tool_rate_limiter()
     allowed, remaining = limiter.is_allowed(tool_name)
@@ -165,6 +166,7 @@ def log_before_model(
         state: AgentState,
         runtime: Runtime,
 ):
+    """模型调用前记录日志，输出待处理的消息数量与最后一条消息内容。"""
     logger.info(f"[log_before_model]即将调用模型，带有{len(state['messages'])}条消息。")
 
     if state['messages']:

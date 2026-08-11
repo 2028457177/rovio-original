@@ -3,13 +3,9 @@
  * - admin 前缀：/api/admin/kb/...（全局知识库，管理员）
  * - user  前缀：/api/kb/...      （个人知识库，登录用户）
  */
-import { getToken } from './auth.js'
-
 function headers(extra = {}) {
-  const token = getToken()
-  const h = { ...extra }
-  if (token) h['Authorization'] = `Bearer ${token}`
-  return h
+  // JWT 存于 HttpOnly Cookie，同源请求自动携带
+  return { ...extra }
 }
 
 async function parse(response) {
@@ -88,8 +84,6 @@ export function uploadDocumentsWithProgress(scope, kbId, files, onProgress) {
     const url = scope === 'admin' ? `${base(scope)}/${kbId}/documents` : `${base(scope)}/mine/${kbId}/documents`
     const xhr = new XMLHttpRequest()
     xhr.open('POST', url)
-    const token = getToken()
-    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.upload.addEventListener('progress', (e) => {
       if (e.lengthComputable && typeof onProgress === 'function') {
         onProgress(Math.min(1, e.loaded / e.total))

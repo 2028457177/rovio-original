@@ -35,7 +35,9 @@ from core.paths import UPLOAD_DIR
 import agent
 from AIRAGAgent.infrastructure.rate_limiter import get_chat_rate_limiter
 from AIRAGAgent.infrastructure.task_queue import register_default_handlers
-from AIRAGAgent.agent.tools.agent_tools import user_ip_var, user_lat_var, user_lon_var, user_id_var
+from AIRAGAgent.agent.tools.agent_tools import (
+    user_ip_var, user_lat_var, user_lon_var, user_id_var, search_enabled_var,
+)
 
 
 async def _on_startup():
@@ -66,6 +68,8 @@ class ChatRequest(BaseModel):
     longitude: float | None = None
     uploaded_file_path: str | None = None
     truncate_to: int | None = None
+    # 联网搜索开关：关闭后 Planner 不会选择 search 子代理
+    search_enabled: bool = True
 
 
 class ConversationSaveRequest(BaseModel):
@@ -106,11 +110,14 @@ class PlanRequest(BaseModel):
     mode: str = "stream"
     latitude: float | None = None
     longitude: float | None = None
+    # 联网搜索开关：关闭后 Planner 不会选择 search 子代理
+    search_enabled: bool = True
 
 
 # ==================== 聊天 ====================
 
 async def generate_sse_stream(user_id: int, message: str, session_id: str = None, truncate_to: int = None):
+    """将 Agent 的流式响应逐块转换为 SSE 事件输出，结束时发送 [DONE] 标记。"""
     async for chunk in agent_service.stream_response(user_id, message, session_id, truncate_to=truncate_to):
         if isinstance(chunk, dict):
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
@@ -123,6 +130,7 @@ async def generate_sse_stream(user_id: int, message: str, session_id: str = None
 
 @app.post("/api/chat")
 async def chat(chat_req: ChatRequest, req: Request, user: dict = Depends(get_current_user)):
+    """处理 /api/chat 聊天请求：限流校验、注入上下文，返回流式(SSE)或非流式回复。"""
     client_ip = (
         req.headers.get("X-Real-IP")
         or (req.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
@@ -134,6 +142,7 @@ async def chat(chat_req: ChatRequest, req: Request, user: dict = Depends(get_cur
     user_lat_var.set(chat_req.latitude)
     user_lon_var.set(chat_req.longitude)
     user_id_var.set(user_id)
+    search_enabled_var.set(chat_req.search_enabled)
 
     limiter = get_chat_rate_limiter()
     allowed, remaining = limiter.is_allowed(client_ip)
@@ -195,6 +204,7 @@ async def chat(chat_req: ChatRequest, req: Request, user: dict = Depends(get_cur
 
 @app.get("/api/conversations")
 async def get_conversations(user: dict = Depends(get_current_user)):
+    """获取当前用户的会话列表并返回。"""
     from AIRAGAgent.database import get_conversations as db_get_conversations
     conversations = await asyncio.get_event_loop().run_in_executor(None, db_get_conversations, user["id"])
     return JSONResponse(content={"conversations": conversations})
@@ -202,9 +212,11 @@ async def get_conversations(user: dict = Depends(get_current_user)):
 
 @app.post("/api/conversations")
 async def save_conversation(request: ConversationSaveRequest, user: dict = Depends(get_current_user)):
+    """保存/覆盖一个会话（标题与消息列表），落库后返回 ok。"""
     from AIRAGAgent.database import save_conversation_full as db_save
 
     def _save():
+        """在线程池里同步执行会话保存，避免阻塞事件循环。"""
         db_save(user["id"], request.id, request.title, request.messages)
     await asyncio.get_event_loop().run_in_executor(None, _save)
     return JSONResponse(content={"status": "ok"})
@@ -212,6 +224,7 @@ async def save_conversation(request: ConversationSaveRequest, user: dict = Depen
 
 @app.delete("/api/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, user: dict = Depends(get_current_user)):
+    """软删除当前用户的指定会话。"""
     from AIRAGAgent.database import delete_conversation as db_delete
     await asyncio.get_event_loop().run_in_executor(None, db_delete, user["id"], conversation_id)
     return JSONResponse(content={"status": "ok"})
@@ -220,6 +233,7 @@ async def delete_conversation(conversation_id: str, user: dict = Depends(get_cur
 @app.patch("/api/conversations/{conversation_id}/meta")
 async def update_conversation_meta(conversation_id: str, req: ConversationMetaRequest,
                                    user: dict = Depends(get_current_user)):
+    """更新会话的元信息（标题等非空字段），返回更新是否成功。"""
     from AIRAGAgent.database import update_conversation_meta as db_update_meta
     meta = {k: v for k, v in req.dict().items() if v is not None}
     if not meta:
@@ -234,6 +248,7 @@ async def update_conversation_meta(conversation_id: str, req: ConversationMetaRe
 
 @app.get("/api/conversations/search")
 async def search_conversations(q: str, user: dict = Depends(get_current_user)):
+    """按关键词全文搜索当前用户的会话并返回结果列表。"""
     from AIRAGAgent.database import search_conversations as db_search
     keyword = (q or "").strip()
     if not keyword:
@@ -247,6 +262,7 @@ async def search_conversations(q: str, user: dict = Depends(get_current_user)):
 @app.post("/api/conversations/{conversation_id}/branch")
 async def branch_conversation(conversation_id: str, req: BranchRequest,
                               user: dict = Depends(get_current_user)):
+    """从指定消息处分叉出新会话，返回新会话信息。"""
     from AIRAGAgent.database import branch_conversation as db_branch
     if req.branch_from_message_id <= 0:
         return JSONResponse(status_code=400, content={"error": "branch_from_message_id 非法"})
@@ -262,6 +278,7 @@ async def branch_conversation(conversation_id: str, req: BranchRequest,
 
 @app.post("/api/feedback")
 async def save_feedback(req: FeedbackRequest, user: dict = Depends(get_current_user)):
+    """保存用户对某条消息的点赞/点踩反馈。"""
     from AIRAGAgent.database import save_message_feedback as db_save_feedback
     if req.feedback not in ("like", "dislike", ""):
         return JSONResponse(status_code=400, content={"error": "feedback 取值非法"})
@@ -293,9 +310,11 @@ async def plan(plan_req: PlanRequest, req: Request, user: dict = Depends(get_cur
     user_lat_var.set(plan_req.latitude)
     user_lon_var.set(plan_req.longitude)
     user_id_var.set(user_id)
+    search_enabled_var.set(plan_req.search_enabled)
 
     if plan_req.mode == "background":
-        task_id = agent_service.enqueue_plan_background(user_id, plan_req.message, plan_req.session_id)
+        task_id = agent_service.enqueue_plan_background(user_id, plan_req.message, plan_req.session_id,
+                                                        search_enabled=plan_req.search_enabled)
         if task_id is None:
             return JSONResponse(status_code=503, content={"error": "Redis 不可用，无法投递后台任务"})
         return JSONResponse(content={"task_id": task_id, "status": "pending"})
@@ -332,27 +351,11 @@ async def get_plan_detail(plan_id: str, user: dict = Depends(get_current_user)):
     return JSONResponse(content={"plan": plan.to_dict()})
 
 
-@app.get("/api/subagents")
-async def list_subagents(user: dict = Depends(get_current_user)):
-    """列出所有可用 SubAgent（供前端展示 Agent 卡片 / 能力清单）"""
-    from AIRAGAgent.agent.sub_agent import SubAgentRegistry
-    registry = SubAgentRegistry()
-    agents = []
-    for name, sub in registry.all().items():
-        agents.append({
-            "name": name,
-            "description": sub.description,
-            "workflow_hint": sub.workflow_hint,
-            "category": sub.category,
-            "tools": [getattr(t, "name", "") for t in sub.tools],
-        })
-    return JSONResponse(content={"subagents": agents})
-
-
 # ==================== 任务状态 ====================
 
 @app.get("/api/tasks/{task_id}")
 async def get_task_status(task_id: str):
+    """查询后台任务（task_id）的执行状态并返回。"""
     from AIRAGAgent.infrastructure.task_queue import get_task_status as queue_get_status
     result = await asyncio.get_event_loop().run_in_executor(None, queue_get_status, task_id)
     if result is None:

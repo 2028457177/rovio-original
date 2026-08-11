@@ -35,6 +35,7 @@ class PlanStatus(str, Enum):
     CANCELLED = "cancelled"        # 用户取消
 
     def __str__(self):
+        """返回计划状态枚举值字符串（如 'planning'）。"""
         return self.value
 
 
@@ -48,6 +49,7 @@ class StepStatus(str, Enum):
     BLOCKED = "blocked"            # 依赖失败，无法执行
 
     def __str__(self):
+        """返回状态枚举的字符串值。"""
         return self.value
 
 
@@ -77,10 +79,12 @@ class PlanStep:
     id: Optional[int] = None
 
     def to_dict(self) -> dict:
+        """把步骤对象转为字典（供持久化/序列化使用）。"""
         return asdict(self)
 
     @classmethod
     def from_row(cls, row: dict) -> "PlanStep":
+        """从数据库行记录构造 PlanStep（解析 depends_on 逗号分隔的步骤序号）。"""
         depends_on = []
         if row.get("depends_on"):
             try:
@@ -121,6 +125,7 @@ class Plan:
     created_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> dict:
+        """把计划对象（含全部步骤）转为字典（供序列化/推送前端使用）。"""
         return {
             "id": self.id,
             "user_id": self.user_id,
@@ -135,6 +140,7 @@ class Plan:
     # ── 依赖解析工具 ──
 
     def get_step(self, step_idx: int) -> Optional[PlanStep]:
+        """按步骤序号查找步骤，找不到返回 None。"""
         for s in self.steps:
             if s.step_idx == step_idx:
                 return s
@@ -163,6 +169,7 @@ class Plan:
         return all(s.status not in active for s in self.steps)
 
     def has_failure(self) -> bool:
+        """判断计划中是否有失败或被阻塞的步骤。"""
         return any(s.status in (StepStatus.FAILED.value, StepStatus.BLOCKED.value) for s in self.steps)
 
 
@@ -292,6 +299,7 @@ def replace_plan_steps(plan_id: str, new_steps: List[PlanStep]) -> None:
 
 
 def update_plan_status(plan_id: str, status: str, final_answer: str = None) -> None:
+    """更新计划的整体状态，可附带最终答案（超长自动截断到 65000 字符）。"""
     sets = ["status = %s", "updated_at = CURRENT_TIMESTAMP"]
     params: list = [status]
     if final_answer is not None:
@@ -322,6 +330,7 @@ def get_session_plan(session_id: str) -> Optional[Plan]:
 
 
 def list_user_plans(user_id: int, limit: int = 20) -> List[dict]:
+    """查询指定用户最近的计划列表（默认 20 条），返回格式化后的字典列表。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(

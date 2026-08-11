@@ -23,6 +23,7 @@ dependencies = [
     "pandas>=3.0.2",
     "PyJWT>=2.8.0",
     "pymysql>=1.1.0",
+    "qdrant-client>=1.12.0",
     "python-docx>=1.2.0",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.32",
@@ -37,6 +38,13 @@ dependencies = [
     "paramiko>=5.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "httpx>=0.27.0",
+]
+
 [tool.pytest.ini_options]
 # langsmith 的 pytest 插件与当前 pydantic/typing_inspection 版本不兼容（schemas 导入报错），
 # 测试体系默认禁用它；按服务目录单独运行（微服务天然隔离）：
@@ -47,4 +55,27 @@ testpaths = ["tests"]
 filterwarnings = [
     "ignore::DeprecationWarning:jwt_auth",
     "ignore::jwt.warnings.InsecureKeyLengthWarning",
+]
+
+# 覆盖率：跑全部测试时加 --cov 即可，例：
+#   pytest --cov --cov-report=term-missing --cov-report=html tests/
+[tool.coverage.run]
+branch = true
+source = ["services", "AIRAGAgent"]
+omit = [
+    "*/tests/*",
+    "services/*/start.bat",
+    "services/*/start.sh",
+    "services/migrate_to_microservices.py",
+    "AIRAGAgent/**/__init__.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+    "except ImportError:",
+    "if TYPE_CHECKING:",
 ]

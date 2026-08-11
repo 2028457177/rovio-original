@@ -24,10 +24,13 @@ user_lat_var: ContextVar[float | None] = ContextVar('user_lat', default=None)
 user_lon_var: ContextVar[float | None] = ContextVar('user_lon', default=None)
 # 存储当前登录用户的真实 ID
 user_id_var: ContextVar[int | None] = ContextVar('user_id', default=None)
+# 联网搜索开关（前端可切换；关闭后 Planner 不再选择 search 子代理）
+search_enabled_var: ContextVar[bool] = ContextVar('search_enabled', default=True)
 
 _rag_instance = None
 
 def _get_rag():
+    """获取 RAG 摘要服务单例，首次调用时惰性创建。"""
     global _rag_instance
     if _rag_instance is None:
         _rag_instance = RagSummarizeService()
@@ -42,6 +45,7 @@ external_data = {}
 
 @tool(description="从向量存储中检索参考资料")
 def rag_summarize(query: str) -> str:
+    """从向量库检索参考资料并生成总结（RAG 查询入口）。"""
     return _get_rag().rag_summarize(query)
 
 
@@ -200,6 +204,7 @@ def get_city_code(city_name: str) -> str:
 
 @tool(description="获取用户的ID，以纯字符串形式返回")
 def get_user_id() -> str:
+    """获取当前登录用户的 ID，以字符串形式返回。"""
     uid = user_id_var.get()
     if uid is not None:
         return str(uid)
@@ -208,6 +213,7 @@ def get_user_id() -> str:
 
 @tool(description="wantday 作为用户想查询的日期与当前日期相差的天数，如明天是 1 后天是 2，大后天是 3，以此类推，如果是查看当天的日期则为 0")
 def get_current_month(wantday:int)-> dict:
+    """计算目标日期（当前日期加相差天数）对应的学期周数和星期几，返回日期、周数与星期信息。"""
     now = datetime.now()
     target_date = now + timedelta(days=wantday)
     want_date_str = target_date.strftime("%Y-%m-%d")
@@ -312,6 +318,7 @@ def generate_external_data():
 
 @tool(description="从外部系统中获取用户的使用记录，以春字符串形式返回，如果未检索到返回空字符串")
 def fetch_external_data(user_id:str,month:str)->str:
+    """从外部系统中获取用户指定月份的使用记录，未检索到返回空字符串。"""
     generate_external_data()
 
     try:
@@ -323,6 +330,7 @@ def fetch_external_data(user_id:str,month:str)->str:
 
 @tool(description="无入参，无返回值，调用后触发中间件自动为报告生成的场景动态注入，为后续提示词切换提供上下文信息")
 def fill_context_for_report():
+    """触发中间件为报告生成场景动态注入上下文。"""
     return "fill_context_for_report己调用"
 
 

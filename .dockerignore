@@ -1,0 +1,60 @@
+# Python 运行时 / 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# Git / IDE / OS
+.git/
+.gitignore
+.idea/
+.vscode/
+.trae/
+.DS_Store
+Thumbs.db
+
+# 运行时产物（容器内由挂载卷承载，不入镜像）
+**/logs/
+*.local.log
+*.local.err
+*.log
+chroma_ab/
+uploads/
+workspace/
+data/
+.langgraph_api/
+
+# 构建产物
+deploy/dist/
+frontend/dist/
+static/
+
+# 本地部署脚本与文档（无需进镜像）
+deploy/*.py
+deploy/*.ps1
+deploy/package.ps1
+*.md
+agent头像.jpg
+
+# 测试（镜像只跑服务，测试在 CI 单独跑）
+tests/
+
+# 环境文件
+.env
+.env.*
+!.env.docker.example
+
+# Docker 自身（避免上下文膨胀）
+Dockerfile
+frontend/Dockerfile
+deploy/docker/
+docker-compose*.yml
+.github/

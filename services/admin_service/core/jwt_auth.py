@@ -19,6 +19,9 @@ from .config import JWT_SECRET_KEY, JWT_ALGORITHM, JWT_TOKEN_EXPIRE_HOURS, ADMIN
 
 _security = HTTPBearer(auto_error=False)
 
+# 登录态 HttpOnly Cookie 名称（auth_service 登录/注册时下发，浏览器自动携带）
+TOKEN_COOKIE_NAME = "lc_auth_token"
+
 
 def get_client_ip(request: Request) -> str:
     """从请求中提取客户端真实 IP（nginx 代理后从 header 读取）"""
@@ -70,6 +73,9 @@ async def get_current_user(
     if credentials:
         token = credentials.credentials
     else:
+        # 从 HttpOnly Cookie 读取浏览器登录态（JS 不可见，防 XSS 窃取）
+        token = request.cookies.get(TOKEN_COOKIE_NAME)
+    if not token:
         token = request.query_params.get("token")
 
     if not token:

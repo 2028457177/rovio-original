@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>Rovio 项目手册 · 代码级复习指南</title>
+<style>
+:root{
+  --paper:#fafaf8; --ink:#1a1a1a; --muted:#6b6b6b; --line:#e4e4e0;
+  --code-bg:#f3f3f0; --accent:#a16207; --danger:#b91c1c;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,"Times New Roman",serif;
+  --sans:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:ui-monospace,"Cascadia Code",Consolas,"JetBrains Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#171717; --ink:#e8e8e6; --muted:#9a9a94; --line:#2e2e2b;
+    --code-bg:#20201e; --accent:#d4a017; --danger:#ef4444;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:15.5px; line-height:1.85;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── layout ── */
+.wrap{display:flex; max-width:1280px; margin:0 auto}
+aside.toc-panel{
+  position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+  width:300px; flex:0 0 300px; padding:32px 20px 40px 28px;
+  border-right:1px solid var(--line); font-size:13.5px;
+}
+aside.toc-panel .toc-title{
+  font-family:var(--serif); font-size:17px; font-weight:700; margin:0 0 14px;
+  letter-spacing:.04em;
+}
+aside.toc-panel ul{list-style:none; margin:0; padding:0}
+aside.toc-panel ul ul{margin-left:14px}
+aside.toc-panel a{
+  display:block; color:var(--muted); padding:3.5px 8px; border-radius:6px;
+  border-left:2px solid transparent;
+}
+aside.toc-panel a:hover{color:var(--ink); background:var(--code-bg); text-decoration:none}
+aside.toc-panel a.toc-h2{margin-left:0}
+aside.toc-panel a.toc-h3{margin-left:16px; font-size:12.5px}
+
+main{flex:1; min-width:0; padding:48px 56px 96px}
+
+/* ── typography ── */
+h1,h2,h3,h4{font-family:var(--serif); line-height:1.4; scroll-margin-top:24px}
+h1{font-size:30px; margin:0 0 6px; letter-spacing:.02em}
+h2{
+  font-size:22px; margin:52px 0 16px; padding-bottom:10px;
+  border-bottom:1px solid var(--line); position:relative;
+}
+h2::before{content:""; position:absolute; left:0; bottom:-1px; width:56px; height:2.5px; background:var(--accent)}
+h3{font-size:17.5px; margin:30px 0 10px; color:var(--ink)}
+h4{font-size:15.5px; margin:22px 0 8px}
+p{margin:12px 0}
+strong{font-weight:700}
+ul,ol{padding-left:26px; margin:12px 0}
+li{margin:5px 0}
+li::marker{color:var(--accent)}
+hr{border:none; border-top:1px solid var(--line); margin:44px 0}
+
+blockquote{
+  margin:16px 0; padding:10px 18px; background:var(--code-bg);
+  border-left:3px solid var(--accent); border-radius:0 8px 8px 0;
+  color:var(--muted);
+}
+blockquote p{margin:6px 0}
+
+/* ── code ── */
+code{
+  font-family:var(--mono); font-size:.88em;
+  background:var(--code-bg); border:1px solid var(--line);
+  padding:1.5px 6px; border-radius:5px;
+}
+pre{
+  background:var(--code-bg); border:1px solid var(--line); border-radius:10px;
+  padding:16px 18px; overflow-x:auto; margin:16px 0;
+}
+pre code{background:none; border:none; padding:0; font-size:13px; line-height:1.7}
+
+/* ── tables ── */
+table{border-collapse:collapse; width:100%; margin:18px 0; font-size:14px}
+th,td{border:1px solid var(--line); padding:8px 12px; text-align:left; vertical-align:top}
+th{background:var(--code-bg); font-weight:700; font-family:var(--serif); letter-spacing:.02em}
+tbody tr:nth-child(even){background:color-mix(in srgb, var(--code-bg) 55%, transparent)}
+td code{white-space:nowrap}
+
+/* ── misc ── */
+.toc-toggle{display:none}
+.back-top{
+  position:fixed; right:26px; bottom:26px; width:42px; height:42px; border-radius:50%;
+  border:1px solid var(--line); background:var(--paper); color:var(--ink);
+  cursor:pointer; font-size:18px; opacity:0; pointer-events:none;
+  transition:opacity .25s; box-shadow:0 4px 14px rgba(0,0,0,.08);
+}
+.back-top.show{opacity:1; pointer-events:auto}
+@media print{
+  aside.toc-panel,.back-top{display:none!important}
+  main{padding:0}
+  pre{white-space:pre-wrap}
+}
+@media (max-width:900px){
+  .wrap{display:block}
+  aside.toc-panel{
+    position:fixed; left:0; top:0; z-index:50; width:280px; height:100vh;
+    transform:translateX(-105%); transition:transform .28s ease; background:var(--paper);
+    box-shadow:0 0 40px rgba(0,0,0,.15);
+  }
+  aside.toc-panel.open{transform:none}
+  .toc-toggle{
+    display:flex; align-items:center; justify-content:center;
+    position:fixed; left:14px; top:14px; z-index:60; width:38px; height:38px;
+    border-radius:10px; border:1px solid var(--line); background:var(--paper);
+    color:var(--ink); cursor:pointer; font-size:17px;
+  }
+  main{padding:64px 20px 80px}
+  h1{font-size:24px}
+}
+</style>
+</head>
+<body>
+<button class="toc-toggle" id="tocToggle" aria-label="打开目录">☰</button>
+<div class="wrap">
+  <aside class="toc-panel" id="tocPanel"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#roviolc-course">Rovio（lc-course）项目手册 · 代码级复习指南</a></li>
+<li><a href="#_1">第一部分 · 项目总览</a><ul>
+<li><a href="#11">1.1 这是什么</a></li>
+<li><a href="#12">1.2 架构总图</a></li>
+<li><a href="#13">1.3 六个微服务速查表</a></li>
+<li><a href="#14">1.4 技术选型一览</a></li>
+<li><a href="#15">1.5 启动方式速查</a></li>
+</ul>
+</li>
+<li><a href="#airagagentagent">第二部分 · AIRAGAgent/agent —— 智能体编排核心（最重要）</a><ul>
+<li><a href="#21-orchestratorpy-supervisor">2.1 orchestrator.py —— Supervisor 主循环</a><ul>
+<li><a href="#pydantic">关键数据模型（Pydantic）</a></li>
+<li><a href="#execute_streaml731-822">主入口 execute_stream（L731-822）三段式</a></li>
+<li><a href="#planner_plan_streaml290-339">Planner：_plan_stream（L290-339）</a></li>
+<li><a href="#executor_execute_stepl361-462">Executor：_execute_step（L361-462）</a></li>
+<li><a href="#_execute_steps_parallell464-514">并行执行：_execute_steps_parallel（L464-514）</a></li>
+<li><a href="#reflector_reflectl589-622">Reflector：_reflect（L589-622）</a></li>
+<li><a href="#finalizer_finalizel657-725">Finalizer：_finalize（L657-725）</a></li>
+<li><a href="#sse">SSE 事件协议全表</a></li>
+</ul>
+</li>
+<li><a href="#22-planpy-plan">2.2 plan.py —— Plan 数据模型与持久化</a><ul>
+<li><a href="#get_ready_stepsl143-158">get_ready_steps（L143-158）—— 依赖解析核心</a></li>
+<li><a href="#crud">CRUD 要点</a></li>
+</ul>
+</li>
+<li><a href="#23-sub_agentpy-subagent">2.3 sub_agent.py —— SubAgent 体系</a><ul>
+<li><a href="#subagent-dataclassl32-75">SubAgent dataclass（L32-75）</a></li>
+<li><a href="#subagentrunnerexecute_streaml111-195">SubAgentRunner.execute_stream（L111-195）</a></li>
+<li><a href="#run_steps_parallell271-333">run_steps_parallel（L271-333）—— 全项目最精妙的并发细节</a></li>
+</ul>
+</li>
+<li><a href="#24-sub_agentsbuiltinpy-11-subagent">2.4 sub_agents/builtin.py —— 11 个内置 SubAgent</a></li>
+<li><a href="#25-tools">2.5 tools/ 工具集</a><ul>
+<li><a href="#agent_toolspy-contextvar">agent_tools.py —— 领域工具 + 请求级 ContextVar 定义点</a></li>
+<li><a href="#codexec_toolspy">codexec_tools.py —— 代码沙箱</a></li>
+<li><a href="#browser_toolspy">browser_tools.py —— 网页抓取</a></li>
+<li><a href="#file_toolspy-word">file_tools.py —— Word 模板填充</a></li>
+<li><a href="#middlewarepy-langchain">middleware.py —— LangChain 中间件链</a></li>
+<li><a href="#memory_toolspy-artifact_toolspy-search_toolspy-wordgen_toolspy">memory_tools.py / artifact_tools.py / search_tools.py / wordgen_tools.py</a></li>
+<li><a href="#sandbox_configpy">sandbox_config.py —— 沙箱策略</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#airagagent">第三部分 · AIRAGAgent 支撑模块</a><ul>
+<li><a href="#31-kb-ragkb_service">3.1 kb/ —— 多知识库 RAG（kb_service 复用）</a><ul>
+<li><a href="#kbmodelspy-crud">kb/models.py —— 两张表的同步 CRUD</a></li>
+<li><a href="#kbservicepy">kb/service.py —— 向量索引/检索/播种（重点）</a></li>
+<li><a href="#kbembeddingpy">kb/embedding.py —— 嵌入提供者</a></li>
+</ul>
+</li>
+<li><a href="#32-rag-rag">3.2 rag/ —— 旧版 RAG 与总结服务</a></li>
+<li><a href="#33-modelfactorypy">3.3 model/factory.py —— 模型工厂</a></li>
+<li><a href="#34-database-mysql">3.4 database/ —— MySQL 层</a><ul>
+<li><a href="#connectionpy">connection.py</a></li>
+<li><a href="#modelspy-160">models.py（约 160 行函数）要点</a></li>
+</ul>
+</li>
+<li><a href="#35-config-yml">3.5 config/ —— 六份 yml</a></li>
+<li><a href="#36-utils-infrastructure">3.6 utils/ 与 infrastructure/</a></li>
+<li><a href="#37-skills">3.7 skills/ —— 旧技能体系</a></li>
+</ul>
+</li>
+<li><a href="#services">第四部分 · services/ —— 六个微服务</a><ul>
+<li><a href="#40-core">4.0 公共 core/ 库（每服务内嵌一份副本，绝对解耦）</a></li>
+<li><a href="#41-auth_service8001lc_auth">4.1 auth_service（:8001，lc_auth）</a></li>
+<li><a href="#42-user_service8002lc_user">4.2 user_service（:8002，lc_user）</a></li>
+<li><a href="#43-chat_service8003lc_chat">4.3 chat_service（:8003，lc_chat）—— 核心服务</a><ul>
+<li><a href="#mainpypost-apichat">main.py：POST /api/chat 处理流程</a></li>
+<li><a href="#agentpy">agent.py：同步生成器 → 异步流的桥接（经典问题）</a></li>
+<li><a href="#db_patchpy-db">db_patch.py：零侵入 DB 重定向（全架构最巧妙的一笔）</a></li>
+<li><a href="#_2">其余路由</a></li>
+</ul>
+</li>
+<li><a href="#44-kb_service8004lc_kb">4.4 kb_service（:8004，lc_kb）</a></li>
+<li><a href="#45-admin_service8005lc_admin">4.5 admin_service（:8005，lc_admin）</a></li>
+<li><a href="#46-file_service8006-db">4.6 file_service（:8006，无 DB）</a></li>
+<li><a href="#47-startbat">4.7 start.bat 差异</a></li>
+</ul>
+</li>
+<li><a href="#frontend-vue-3">第五部分 · frontend/ —— Vue 3 前端</a><ul>
+<li><a href="#51">5.1 工程配置</a></li>
+<li><a href="#52-apichatjs-sse">5.2 api/chat.js —— SSE 消费核心</a></li>
+<li><a href="#53-usechatjs-866-pinia">5.3 useChat.js —— 全应用状态中枢（866 行，无 Pinia）</a><ul>
+<li><a href="#sendmessage">sendMessage 流程要点</a></li>
+<li><a href="#_3">前后端历史一致性</a></li>
+<li><a href="#_4">防丢失三件套</a></li>
+</ul>
+</li>
+<li><a href="#54">5.4 视图与组件要点</a></li>
+</ul>
+</li>
+<li><a href="#_5">第六部分 · 部署 / 迁移 / 构建 / 测试</a><ul>
+<li><a href="#61-deploy">6.1 deploy/</a></li>
+<li><a href="#62-migrations-alembic-env-5">6.2 migrations/ —— 一套 alembic env 跑 5 个库</a></li>
+<li><a href="#63-dockerfile">6.3 Dockerfile —— 多阶段构建</a></li>
+<li><a href="#64-tests-pytest">6.4 tests/ —— pytest 体系</a></li>
+<li><a href="#65">6.5 其他目录</a></li>
+</ul>
+</li>
+<li><a href="#_6">第七部分 · 贯穿全局的十大设计精髓（复习重点）</a></li>
+<li><a href="#_7">第八部分 · 已知坑与瑕疵清单（复盘用）</a></li>
+<li><a href="#_8">第九部分 · 一条请求的完整生命周期（串线复习）</a></li>
+<li><a href="#_9">附录 · 复习自测清单</a></li>
+</ul>
+</div>
+</aside>
+  <main id="content"><h1 id="roviolc-course">Rovio（lc-course）项目手册 · 代码级复习指南</h1>
+<blockquote>
+<p>写给作者本人的复习手册。按「总览 → 引擎 → 微服务 → 前端 → 部署测试 → 设计精髓与坑」的顺序，从头到尾把项目过一遍。所有行号、函数名、事件名均来自当前代码库实读。</p>
+</blockquote>
+<hr />
+<h1 id="_1">第一部分 · 项目总览</h1>
+<h2 id="11">1.1 这是什么</h2>
+<p><strong>Rovio</strong> —— 基于 <strong>微服务 + Supervisor-Worker 多智能体编排</strong> 的自动化办公助手。用户一句话触发「规划 → 多 Agent 并行执行 → 反思修订 → 汇总」的完整工作流，集成 RAG 知识库、联网搜索、代码沙箱、网页抓取、Word 文档生成/填充、产物管理、长期记忆，全程 SSE 流式可观测。</p>
+<p>架构演进：旧版是 Streamlit + <code>SupervisorAgent</code> + <code>ReactAgent</code> 两层单体（<code>app.py</code>/<code>fastapi_app/</code>/<code>react_agent.py</code>，已废弃），后演进为单体 FastAPI（库 <code>agent_records</code>），最终拆分为现在的 <strong>6 微服务 + AIRAGAgent 引擎包</strong> 形态。<code>langgraph.json</code> 是历史保留，不再是运行入口。</p>
+<h2 id="12">1.2 架构总图</h2>
+<pre><code>                              ┌──────────────────────────────────────┐
+                              │           前端  Vue 3 + Vite          │
+                              │  ChatView / KbManager / AdminView ... │
+                              └───────────────────┬──────────────────┘
+                                                  │  /api/*  (SSE 流式)
+                                                  ▼
+                                          ┌───────────────┐
+                                          │  Nginx / Vite │  按 URL 前缀路由
+                                          │     代理       │
+                                          └───────┬───────┘
+                ┌─────────────────────────┼─────────────────────────────────┐
+                ▼                         ▼                                 ▼
+        ┌──────────────┐         ┌──────────────────┐               ┌──────────────┐
+        │ auth_service │         │  chat_service    │               │  kb_service  │
+        │   :8001      │         │     :8003        │               │    :8004     │
+        │ JWT/注册/登录 │         │  Orchestrator    │               │ 多知识库 RAG │
+        │ 库 lc_auth   │         │  库 lc_chat      │               │ 库 lc_kb     │
+        └──────┬───────┘         └────────┬─────────┘               └──────┬───────┘
+               │                          │ 复用 AIRAGAgent 引擎           │ 复用 AIRAGAgent 引擎
+        ┌──────┴───────┐                  │                                │
+        │ user_service │           ┌──────┴─────────┐              ┌───────┴──────┐
+        │   :8002      │           │  AIRAGAgent    │              │  ChromaDB    │
+        │ 档案/课表/模型│           │  Orchestrator  │              │  kb_store    │
+        │ 库 lc_user   │           │  + SubAgents   │              │  向量存储     │
+        └──────────────┘           └──────┬─────────┘              └──────────────┘
+                                          │ Redis Pub/Sub 事件
+                                          ▼
+                                  ┌──────────────────┐         ┌──────────────┐
+                                  │  admin_service   │         │ file_service │
+                                  │     :8005        │         │    :8006     │
+                                  │ 统计/审计/限流    │         │ 文件系统即存储│
+                                  │ 库 lc_admin      │         │   无 DB      │
+                                  └──────────────────┘         └──────────────┘
+
+  ── MySQL 5 库：lc_auth / lc_user / lc_chat / lc_kb / lc_admin ──
+  ── Redis：Pub/Sub 事件总线 + 会话缓存 + 限流计数 + 任务队列 ──
+</code></pre>
+<h2 id="13">1.3 六个微服务速查表</h2>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>端口</th>
+<th>数据库</th>
+<th>职责</th>
+<th>是否依赖 AIRAGAgent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>auth_service</td>
+<td>8001</td>
+<td>lc_auth</td>
+<td>注册/登录/JWT/密保找回/设备管理</td>
+<td>否（自包含）</td>
+</tr>
+<tr>
+<td>user_service</td>
+<td>8002</td>
+<td>lc_user</td>
+<td>用户档案/头像/课表 Excel/自配模型/注销编排</td>
+<td>否（自包含）</td>
+</tr>
+<tr>
+<td><strong>chat_service</strong></td>
+<td>8003</td>
+<td>lc_chat</td>
+<td><strong>核心</strong>：<code>/api/chat</code> SSE 入口 → Orchestrator</td>
+<td>是（PYTHONPATH 指项目根）</td>
+</tr>
+<tr>
+<td>kb_service</td>
+<td>8004</td>
+<td>lc_kb</td>
+<td>多知识库 CRUD + 文档索引/检索（ChromaDB）</td>
+<td>是</td>
+</tr>
+<tr>
+<td>admin_service</td>
+<td>8005</td>
+<td>lc_admin</td>
+<td>统计看板/用户管理/Redis 事件订阅落库</td>
+<td>否（自包含）</td>
+</tr>
+<tr>
+<td>file_service</td>
+<td>8006</td>
+<td>无</td>
+<td>Word 上传下载 + AI 工作区文件浏览</td>
+<td>否（自包含）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="14">1.4 技术选型一览</h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>技术</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>前端</td>
+<td>Vue 3 + Vite，无 Pinia</td>
+<td><code>useChat</code> 模块级单例管状态；路由级 <code>() =&gt; import()</code> 代码分割</td>
+</tr>
+<tr>
+<td>Markdown</td>
+<td><strong>自研零依赖渲染器</strong> <code>utils/markdown.js</code></td>
+<td>markdown-it/vue-virtual-scroller 在 package.json 里但<strong>实际未使用</strong>（冗余依赖）</td>
+</tr>
+<tr>
+<td>后端</td>
+<td>FastAPI + Uvicorn</td>
+<td>原生 async + SSE；Pydantic 校验</td>
+</tr>
+<tr>
+<td>编排</td>
+<td>LangChain <code>create_agent</code> + 中间件链</td>
+<td>注意：<strong>没有真正用 LangGraph 图</strong>，<code>create_agent</code> 内部是 LangGraph 实现</td>
+</tr>
+<tr>
+<td>LLM</td>
+<td>DeepSeek（thinking 模式）</td>
+<td>流式 <code>reasoning_content</code> 作为思考过程推送</td>
+</tr>
+<tr>
+<td>向量库</td>
+<td>ChromaDB 嵌入式</td>
+<td>集合 <code>kb_store</code>，按 chunk 元数据 <code>kb_id/doc_id</code> 隔离</td>
+</tr>
+<tr>
+<td>嵌入</td>
+<td>OpenAI 兼容端点（百炼）/ DashScope</td>
+<td><code>kb/embedding.py</code> 可切换</td>
+</tr>
+<tr>
+<td>DB</td>
+<td>MySQL 8，每服务独立库</td>
+<td>pymysql 短连接，<strong>无 ORM、无连接池</strong></td>
+</tr>
+<tr>
+<td>缓存/事件</td>
+<td>Redis</td>
+<td>Pub/Sub + ZSET 滑动窗口限流 + 缓存 + 任务队列</td>
+</tr>
+<tr>
+<td>鉴权</td>
+<td>JWT HS256，密钥共享</td>
+<td>各服务独立验签，<strong>不查库不回调 auth</strong></td>
+</tr>
+<tr>
+<td>包管理</td>
+<td>uv + uv.lock</td>
+<td><code>uv sync</code> 安装</td>
+</tr>
+</tbody>
+</table>
+<h2 id="15">1.5 启动方式速查</h2>
+<pre><code class="language-powershell"># 1. 配置
+Copy-Item deploy\backend\.env.example deploy\backend\.env   # 填 MYSQL_PASSWORD / JWT_SECRET_KEY / DEEPSEEK_API_KEY 等
+# 2. 依赖
+uv sync
+cd frontend; npm install; cd ..
+# 3. 一键启动 6 个微服务
+.\deploy\backend\start_microservices.bat
+# 4. 前端
+cd frontend; npm run dev   # http://localhost:5173（内置微服务代理，无需 nginx）
+# 5. 验证
+foreach ($p in 8001..8006) { Invoke-RestMethod &quot;http://localhost:$p/api/health&quot; }
+</code></pre>
+<p>Docker 全栈：<code>docker compose up -d --build</code>（migrator 先跑 alembic baseline，再起 6 服务 + 前端 nginx）。</p>
+<hr />
+<h1 id="airagagentagent">第二部分 · AIRAGAgent/agent —— 智能体编排核心（最重要）</h1>
+<p>这是整个项目的心脏。核心范式是 <strong>Planner → Executor → Reflector → Finalizer</strong> 四阶段，由 <code>Orchestrator</code> 一个类驱动。</p>
+<h2 id="21-orchestratorpy-supervisor">2.1 orchestrator.py —— Supervisor 主循环</h2>
+<p><strong>职责</strong>：把用户请求拆成 Plan、调度 SubAgent 执行、反思修订、流式汇总答案，全程产出 SSE 事件。</p>
+<h3 id="pydantic">关键数据模型（Pydantic）</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>定义</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>StepSpec</code> (L59)</td>
+<td><code>description / subagent / depends_on</code></td>
+<td>Planner 产出的单步规约，<code>depends_on</code> 是 step_idx 列表（从 0 开始）</td>
+</tr>
+<tr>
+<td><code>PlanSpec</code> (L73)</td>
+<td><code>goal / steps</code></td>
+<td>完整计划规约</td>
+</tr>
+<tr>
+<td><code>Reflection</code> (L79)</td>
+<td><code>action / feedback</code></td>
+<td>反思结果，action ∈ <code>accept / retry / revise / ask_user</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="execute_streaml731-822">主入口 execute_stream（L731-822）三段式</h3>
+<pre><code class="language-python">def execute_stream(self, query, chat_history, user_id, session_id):
+    # 1) 规划
+    plan_gen = self._plan_stream(query, chat_history, user_id)
+    while True:
+        try:
+            chunk = next(plan_gen); yield chunk          # 思考过程逐个透传
+        except StopIteration as e:
+            spec = e.value; break                        # generator 返回值 = PlanSpec
+    plan = self._build_plan(spec, user_id, session_id)   # 落库 plans + plan_steps
+    yield {&quot;type&quot;: &quot;plan_created&quot;, ...}
+
+    # 2) 执行 + 反思主循环
+    while not plan.is_all_done():
+        ready = plan.get_ready_steps()                   # 依赖感知调度
+        if len(ready) == 1:
+            result = yield from self._execute_step(plan, ready[0], ...)
+            reflection = self._reflect(...)
+            # accept / retry(≤1) / revise(≤2, continue 重进循环) / ask_user
+        else:
+            yield from self._execute_steps_parallel(plan, ready, ...)  # 并行批次
+
+    # 3) 汇总
+    final_text = yield from self._finalize(plan, query, llm)
+    yield {&quot;type&quot;: &quot;plan_completed&quot;, ...}
+</code></pre>
+<p><strong><code>next()</code> + <code>StopIteration.value</code></strong> 是「generator 既流式又返回值」的经典技巧——<code>_plan_stream</code> 一边 yield 思考事件，一边把解析好的 PlanSpec 通过 return 带回来。</p>
+<h3 id="planner_plan_streaml290-339">Planner：_plan_stream（L290-339）</h3>
+<ul>
+<li>用 <code>llm.stream()</code> 逐 chunk 处理：从 <code>chunk.additional_kwargs["reasoning_content"]</code> 取 DeepSeek thinking 推理过程 yield <code>thinking</code> 事件；正文累加后 <code>_extract_json</code> + <code>json.loads</code> + <code>PlanSpec(**data)</code>。</li>
+<li><strong>有意不用 <code>with_structured_output</code></strong>（L255 注释）：DeepSeek thinking 模式不支持 <code>tool_choice</code>。这是全项目最重要的兼容性取舍——Planner 输出是<strong>纯文本 JSON</strong>，靠 <code>_extract_json</code>（L169）容错提取（去 <code>`` 围栏、取第一个</code>{<code>到最后一个</code>}`）。</li>
+<li>规划前 <code>_recall_relevant_memory</code>（L231）召回 10 条长期记忆注入上下文，失败静默降级；<code>_format_history</code>（L217）只取最近 6 条历史、每条截 200 字。</li>
+<li>Planner 失败兜底：<code>PlanSpec(goal=query, steps=[StepSpec(subagent="")])</code>——退化为单步直接回答。</li>
+</ul>
+<h3 id="executor_execute_stepl361-462">Executor：_execute_step（L361-462）</h3>
+<pre><code class="language-python">token_plan = current_plan_id_var.set(plan.id)        # 三个 artifact ContextVar
+token_session = current_session_id_var.set(plan.session_id)
+token_step = current_step_idx_var.set(step.step_idx)
+# ... finally 里逐个 reset(token)，早退分支也手动 reset，不泄漏
+</code></pre>
+<ul>
+<li><code>increment_attempts=bool(feedback)</code>：带反馈重跑才累加 attempts，首次执行不算。</li>
+<li>前序结果注入：<code>task_desc += self._build_step_context(plan, exclude={step.step_idx})</code>。</li>
+<li><strong>两条执行路径</strong>：
+  1. <code>subagent</code> 为空 → Orchestrator LLM 直接回答。<strong>单步 plan 用旧协议事件名 <code>thinking</code>/<code>output</code>，多步用 <code>step_thinking</code>/<code>step_output</code></strong>（前端兼容设计）；单步时用原始 <code>query</code> 而非 <code>step.description</code> 作 HumanMessage（Planner 改写会偏语义）。
+  2. <code>subagent</code> 非空 → <code>SubAgentRunner(sub, llm)</code> 每次新建实例，<code>runner.execute_stream</code> 事件改写成 <code>step_*</code> 透传。</li>
+<li>结果 <code>[:65000]</code> 截断写库（匹配 MySQL TEXT 65535 字节上限），<code>_save_step_result</code> 落盘 <code>tasks/&lt;plan_id&gt;/plan_results/step_&lt;idx&gt;.md</code>，yield <code>step_completed</code>。</li>
+<li><strong>异常不抛出</strong>：单步失败写 FAILED + yield <code>step_failed</code> + return 空串，主循环继续跑后续步骤。</li>
+</ul>
+<h3 id="_execute_steps_parallell464-514">并行执行：_execute_steps_parallel（L464-514）</h3>
+<ul>
+<li>只有 <code>all(s.subagent for s in steps)</code> 才真并行；混有直接回答步则退化串行。</li>
+<li>并行时<strong>故意不设 step_idx ContextVar</strong>（L472 注释），每个 spec 的 description 注入 <code>_build_step_context(plan, exclude=batch_indices)</code>——<strong>排除整个并行批次</strong>，因为批次内步骤彼此独立、不应互相引用结果。</li>
+<li>并行步<strong>不逐个反思</strong>（太慢），只对失败步不调 LLM 直接重试一次。</li>
+</ul>
+<h3 id="reflector_reflectl589-622">Reflector：_reflect（L589-622）</h3>
+<p>两条短路：
+- subagent 为空 → 直接 accept；
+- FAILED 步若 <code>attempts &lt;= MAX_RETRIES(=1)</code> → 直接 retry（不调 LLM），否则 accept 防死循环。</p>
+<p>正常路径把 <code>step.result[:2000]</code> 喂给 Reflector LLM，解析失败默认 accept。约束：<code>MAX_RETRIES=1</code>、<code>MAX_REVISIONS=2</code>。</p>
+<h3 id="finalizer_finalizel657-725">Finalizer：_finalize（L657-725）</h3>
+<ul>
+<li>单步直接回答的 plan 不二次加工（output 已在执行时流式推送过）。</li>
+<li>全失败 → 直接输出失败话术，plan 置 FAILED。</li>
+<li>部分/全部成功 → 每步 <code>result[:1500]</code> 拼 summary 让 Finalizer LLM 整合，流式 yield；流式失败 fallback 直接拼接各步结果。</li>
+</ul>
+<h3 id="sse">SSE 事件协议全表</h3>
+<table>
+<thead>
+<tr>
+<th>事件</th>
+<th>时机</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>thinking</code></td>
+<td>Planner 推理流 / 单步直接回答的思考</td>
+</tr>
+<tr>
+<td><code>plan_created</code></td>
+<td>计划落库后</td>
+</tr>
+<tr>
+<td><code>step_started</code> / <code>step_thinking</code> / <code>step_output</code> / <code>step_completed</code> / <code>step_failed</code></td>
+<td>多步执行过程</td>
+</tr>
+<tr>
+<td><code>plan_reflecting</code> / <code>plan_revised</code></td>
+<td>反思与修订</td>
+</tr>
+<tr>
+<td><code>ask_user</code></td>
+<td>Reflector 要求用户澄清（plan 直接置 COMPLETED 返回）</td>
+</tr>
+<tr>
+<td><code>output</code></td>
+<td>单步直接回答正文 / Finalizer 汇总</td>
+</tr>
+<tr>
+<td><code>plan_completed</code></td>
+<td>全部完成</td>
+</tr>
+<tr>
+<td><code>message_ids</code></td>
+<td>chat_service 落库后补发（前端用于反馈/分叉）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="22-planpy-plan">2.2 plan.py —— Plan 数据模型与持久化</h2>
+<ul>
+<li><strong>状态枚举</strong>：<code>PlanStatus</code>（planning/executing/reflecting/completed/failed/revised/cancelled）、<code>StepStatus</code>（pending/ready/running/completed/failed/skipped/blocked）。注意 READY 定义了但从不落库（ready 是计算出来的）。</li>
+<li><code>plan_id = f"plan_{毫秒时间戳}_{uuid前6位}"</code>；<code>depends_on</code> 在 DB 里存逗号分隔字符串，<code>from_row</code> 解析回 int 列表。</li>
+</ul>
+<h3 id="get_ready_stepsl143-158">get_ready_steps（L143-158）—— 依赖解析核心</h3>
+<pre><code class="language-python">completed_idxs = {s.step_idx for s in self.steps if s.status == COMPLETED}
+failed_idxs    = {s.step_idx for s in self.steps if s.status in (FAILED, BLOCKED)}
+for s in self.steps:
+    if s.status != PENDING: continue
+    if all(dep in completed_idxs for dep in s.depends_on):
+        ready.append(s)                        # 同批返回多个 = 并行批次
+    elif any(dep in failed_idxs for dep in s.depends_on):
+        s.status = BLOCKED                     # 有副作用的 getter！
+</code></pre>
+<p><strong>坑</strong>：BLOCKED 只改内存，主循环负责持久化（orchestrator 已配合处理）。</p>
+<h3 id="crud">CRUD 要点</h3>
+<ul>
+<li><code>create_plan</code>：<code>cursor.lastrowid</code> 回填 <code>step.id</code>。</li>
+<li><code>update_step_status</code>：动态拼 SET；running 写 <code>started_at</code>，终态写 <code>finished_at</code>；<code>attempts = attempts + 1</code> 原子自增。</li>
+<li><code>replace_plan_steps</code>：修订时<strong>整体 DELETE 再 INSERT</strong>（不留旧步历史），plan 重置为 executing。</li>
+<li><code>get_session_plan</code>：<code>ORDER BY (status IN ('planning','executing',...)) DESC, created_at DESC</code>——布尔表达式排序，优先取未完成 plan。</li>
+</ul>
+<h2 id="23-sub_agentpy-subagent">2.3 sub_agent.py —— SubAgent 体系</h2>
+<h3 id="subagent-dataclassl32-75">SubAgent dataclass（L32-75）</h3>
+<pre><code class="language-python">@dataclass
+class SubAgent:
+    name: str; description: str; tools: list
+    system_prompt: str; workflow_hint: str
+    max_tool_calls: int = 20
+    category: str = &quot;domain&quot;
+
+    def build_agent(self, llm=None):
+        return create_agent(
+            model=llm or chat_model,
+            system_prompt=identity + self.system_prompt,
+            tools=self.tools,
+            middleware=[ToolCallLimitMiddleware(run_limit=self.max_tool_calls, exit_behavior=&quot;end&quot;),
+                        skill_aware_monitor, log_before_model, smart_prompt_switch],
+        )
+</code></pre>
+<p><strong>每次调用新建独立 agent 实例</strong>——这是线程安全的关键。</p>
+<h3 id="subagentrunnerexecute_streaml111-195">SubAgentRunner.execute_stream（L111-195）</h3>
+<ul>
+<li>与旧 ReactAgent 流式协议完全一致（thinking/thinking_end/output），Orchestrator 可无缝替换。</li>
+<li><code>runtime_context["active_skills"] = [sub_agent.name]</code> 注入，供 <code>smart_prompt_switch</code> 中间件识别当前激活的 SubAgent。</li>
+<li><code>stream_mode="messages"</code> + <code>context=runtime_context</code>；<code>except TypeError</code> 回退不带 context 的调用（兼容旧 langchain 的防御写法）。</li>
+<li><strong>兜底</strong>（L191-195）：调了工具但没有任何可见 output 时，把所有工具结果拼成列表补发 output——防止 agent 只调工具不总结导致前端空白。</li>
+</ul>
+<h3 id="run_steps_parallell271-333">run_steps_parallel（L271-333）—— 全项目最精妙的并发细节</h3>
+<pre><code class="language-python">parent_ctx = contextvars.copy_context()       # 主线程捕获快照（user_id/ip/plan_id...）
+def _run_one(spec):
+    child_ctx = parent_ctx.copy()             # 每个 worker 复制独立副本！
+    child_ctx.run(_inner)                     # 在副本里跑流式消费
+</code></pre>
+<p><strong>为什么不能直接共享 parent_ctx</strong>：<code>Context</code> 对象非线程安全，多线程共享同一个 <code>Context.run()</code> 会报 "already entered"。每个 worker 必须 <code>.copy()</code>。<code>ThreadPoolExecutor(max_workers=min(5, len(specs)))</code>，<code>as_completed</code> 收集后按 step_idx 排序保证输出稳定；单步异常包装成 <code>success=False</code> 不炸批次。</p>
+<h2 id="24-sub_agentsbuiltinpy-11-subagent">2.4 sub_agents/builtin.py —— 11 个内置 SubAgent</h2>
+<p><code>register_all_subagents()</code> 用 <code>registry._initialized</code> 守卫保证幂等（模块加载、<code>__init__.py</code>、Orchestrator.<strong>init</strong> 三处调用）。</p>
+<table>
+<thead>
+<tr>
+<th>category</th>
+<th>name</th>
+<th>max_tool_calls</th>
+<th>工作流</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>domain</td>
+<td>weather</td>
+<td>20</td>
+<td>get_user_location → get_city_code → get_weather</td>
+</tr>
+<tr>
+<td>domain</td>
+<td>schedule</td>
+<td>20</td>
+<td>get_current_month → get_schedule</td>
+</tr>
+<tr>
+<td>domain</td>
+<td>report</td>
+<td>20</td>
+<td>get_user_id → fill_context_for_report → fetch_external_data → create_artifact</td>
+</tr>
+<tr>
+<td>domain</td>
+<td>knowledge</td>
+<td>20</td>
+<td>rag_summarize</td>
+</tr>
+<tr>
+<td>domain</td>
+<td>document</td>
+<td>20</td>
+<td>auto_fill_word</td>
+</tr>
+<tr>
+<td>domain</td>
+<td>search</td>
+<td>20</td>
+<td>search (Tavily)</td>
+</tr>
+<tr>
+<td>builtin</td>
+<td>codexec</td>
+<td><strong>15</strong></td>
+<td>代码沙箱（装包链路易触顶，故意调低）</td>
+</tr>
+<tr>
+<td>builtin</td>
+<td>browser</td>
+<td><strong>25</strong></td>
+<td>抓取链路长（搜索页→extract_links→详情页→403 回退 rendered），15 次不够</td>
+</tr>
+<tr>
+<td>builtin</td>
+<td>wordgen</td>
+<td>12</td>
+<td>run_word_code（WordDoc 排版类）</td>
+</tr>
+<tr>
+<td>memory</td>
+<td>memory</td>
+<td>20</td>
+<td>remember / recall / recall_one / forget</td>
+</tr>
+<tr>
+<td>artifact</td>
+<td>artifact</td>
+<td>20</td>
+<td>create_artifact / list_artifacts / get_artifact</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Prompt 是驯化精华</strong>：
+- <code>CODEXEC_PROMPT</code>：三级隔离工作目录、强制相对路径、禁止绝对路径（触发 UAC/Defender）、30 天清理、反爬规范（完整 headers + <code>sleep(random.uniform(1,3))</code> + 403 停手转 browser）。
+- <code>WORDGEN_PROMPT</code>：4 套 theme（modern/official/fresh/academic）、硬性规则"只准用 WordDoc 禁止裸 python-docx"、读前序数据用 <code>plan_results/step_&lt;idx&gt;.md</code>。
+- <code>BROWSER_PROMPT</code>：禁止用 run_python_code 抓网页；403 → fetch_url_rendered；screenshot_url 工作流（装 playwright → install chromium 淘宝镜像 ~150MB → 截图）。</p>
+<h2 id="25-tools">2.5 tools/ 工具集</h2>
+<h3 id="agent_toolspy-contextvar">agent_tools.py —— 领域工具 + 请求级 ContextVar 定义点</h3>
+<ul>
+<li><strong>四个 ContextVar</strong>（L21-26）：<code>user_ip_var / user_lat_var / user_lon_var / user_id_var</code>——FastAPI 层请求开始时 set，工具内 <code>.get()</code> 读，多用户隔离的地基。</li>
+<li><code>get_weather</code>：wttr.in 免费接口 <code>?format=j1&amp;lang=zh</code>，每天 hourly 第 4 条（~12:00）当白天、第 7 条（~21:00）当夜晚。</li>
+<li><code>get_user_location</code>：双源定位——浏览器 GPS 走 Nominatim 逆地理编码（必须带 UA），回退高德 IP 定位；处理了直辖市 city 为空/返回 list 的坑。</li>
+<li><code>get_user_id</code>：<strong>坑</strong>——无上下文时 <code>random.choice(user_ids)</code> 返回随机假 ID（旧演示模式遗留）。</li>
+<li><code>fill_context_for_report</code>：<strong>空操作工具</strong>，唯一作用是触发 middleware 把 <code>runtime.context["report"]=True</code> 从而切换报告 prompt——"用工具调用做信号"的技巧。</li>
+<li><code>get_schedule</code>（L330-525）：课表 Excel 解析器，<code>pd.read_excel(file, header=2, index_col=0)</code>；内部闭包 <code>_parse_weeks</code>（"1-4,6-8,10" + 单双周过滤）、<code>_parse_course_cell</code>（<code>&lt;br&gt;</code> 分行、<code>◇</code> 分段、正则解析周次节次）。</li>
+</ul>
+<h3 id="codexec_toolspy">codexec_tools.py —— 代码沙箱</h3>
+<ul>
+<li>Python 危险模式（os.system/subprocess/shutil.rmtree）<strong>只告警不拦截</strong>；shell 黑名单（<code>rm -rf</code>/<code>format</code>/<code>shutdown</code>/fork bomb）<strong>默认拦截</strong>。</li>
+<li><code>run_python_code</code>：<code>subprocess.run([sys.executable, "-"], input=code, ...)</code>——<strong>stdin 传代码（<code>python -</code>）避免临时文件</strong>；Windows 用 <code>CREATE_NEW_PROCESS_GROUP</code> 便于整组 kill。</li>
+<li><code>_exec_cwd()</code>：子进程 cwd = <code>workspace/{user_id}/{YYYYMMDD}/tasks/{plan_id}/</code>（任务级隔离）。</li>
+<li><code>_truncate</code>：<strong>掐头去尾保留两端</strong>（各 2500 字符），比单纯截尾更利于 LLM 看到开头报错和结尾结果。</li>
+<li><code>install_package</code>：uv → venv pip → <code>python -m pip</code> 三级回退，注入清华 PyPI 镜像，超时硬上限 120s。</li>
+</ul>
+<h3 id="browser_toolspy">browser_tools.py —— 网页抓取</h3>
+<ul>
+<li>bs4/playwright 双 try-import，缺失时正则降级，模块永远可 import。</li>
+<li>完整 Chrome 120 指纹头 + 全局 Session 保 Cookie + 每次请求随机延迟 1~3s + 5xx 自动重试。</li>
+<li><strong>编码坑</strong>：requests 无 charset 时默认 ISO-8859-1，回退 <code>resp.apparent_encoding</code>。</li>
+<li><strong>反检测体系</strong>：<code>_STEALTH_JS</code> 抹掉 <code>navigator.webdriver</code>、伪装 languages/plugins；<code>_STEALTH_ARGS</code> 含 <code>--disable-blink-features=AutomationControlled</code>。</li>
+<li><code>fetch_url</code> 失败信息含 403 时自动附"可尝试 fetch_url_rendered"——<strong>给 LLM 的自愈线索</strong>。</li>
+<li><code>_ensure_chromium()</code> 两级检测（区分"未下载"和"下载不完整"），提示文案直接指导 LLM 调 install_package + <code>playwright install chromium</code> 自愈。</li>
+<li>import 本模块时通过 <code>sandbox_config</code> 副作用注入 <code>PLAYWRIGHT_DOWNLOAD_HOST</code>（淘宝镜像）和 <code>PLAYWRIGHT_BROWSERS_PATH</code>（避免 IDE 沙箱拦截 AppData 写入）。</li>
+</ul>
+<h3 id="file_toolspy-word">file_tools.py —— Word 模板填充</h3>
+<ul>
+<li>占位语法 <code>{内容提示|字体|字号}</code>，<code>TAG_PATTERN</code> 正则三组捕获。</li>
+<li><strong>东亚字体坑</strong>：只设 <code>run.font.name</code> 对中文无效，必须操作 XML <code>w:rFonts</code> 的 <code>w:eastAsia</code> 属性。</li>
+<li><code>_replace_in_single_paragraph</code> 是本文件最难的逻辑：处理 docx 的 <strong>run 切片</strong>问题——跨 run 时整段重建单 run、单 run 时<strong>从右往左</strong>替换避免偏移失效；仅当 run 恰好只有一个标签且占满整个 run 时才应用自定义字体。</li>
+<li>中文字号映射表（初号 42pt → 八号 5pt）。</li>
+<li>流程：提取文档上下文 → 收集全部标签 → 一次 LLM 批量生成 → 替换 → 存 <code>filled_{uuid8}.docx</code> → <strong>删除模板文件</strong>（破坏性！）→ 返回下载链接。</li>
+</ul>
+<h3 id="middlewarepy-langchain">middleware.py —— LangChain 中间件链</h3>
+<ul>
+<li><code>ToolCallLimitMiddleware</code>：工具调用超限 <code>exit_behavior="end"</code> 强制收尾。</li>
+<li><code>skill_aware_monitor</code>（@wrap_tool_call）：限流时埋点 <code>log_rate_limit_event</code>；调工具时反查所属 SubAgent 把 name append 到 <code>runtime.context["active_skills"]</code>——<strong>这就是 SubAgent 自动激活机制</strong>；调用结束埋点写 <code>tool_call_logs</code>（失败静默）。</li>
+<li><code>smart_prompt_switch</code>（@dynamic_prompt）：优先级 = report 场景 → active_skills 注入各 SubAgent prompt（带 <code>&lt;!-- 已激活技能 [name] --&gt;</code> 注释）→ 按已调用工具注入工具详情 → 裸 identity。</li>
+<li><strong>瑕疵</strong>：函数名 <code>_log_tool_call埋点</code> 中英混用，合法但易踩编码坑。</li>
+</ul>
+<h3 id="memory_toolspy-artifact_toolspy-search_toolspy-wordgen_toolspy">memory_tools.py / artifact_tools.py / search_tools.py / wordgen_tools.py</h3>
+<ul>
+<li>memory：remember/recall/recall_one/forget 薄封装，四分型 fact/preference/project/schedule，软删除。</li>
+<li>artifact：<strong>三个执行上下文 ContextVar 的定义点</strong>（<code>current_plan_id_var</code> 等）；<code>create_artifact</code> 落盘 <code>UPLOAD_DIR/artifacts/</code> 后<strong>绕过 database 层直接 pymysql INSERT</strong>（导入了 <code>_db_create</code> 却没用，轻度坏味道）。</li>
+<li>search：极薄 Tavily 封装，<code>max_results=1</code> 是坑（结果单薄）。</li>
+<li>wordgen：<code>run_word_code</code> 生成"插 sys.path + import WordDoc"的前导代码与用户代码拼接，stdin 传给 <code>python -</code>。</li>
+</ul>
+<h3 id="sandbox_configpy">sandbox_config.py —— 沙箱策略</h3>
+<ul>
+<li><code>check_path_permission</code>：读全放行；写/删 <strong>writable 优先于 readonly</strong>（允许只读根内挖可写子目录，如 C:\ 只读但 workspace 可写）。注意文件头 docstring 写"readonly 优先"已过时，与实际代码矛盾。</li>
+<li><code>_is_path_under</code>：<code>Path.resolve()</code> 后前缀比较，末尾补分隔符防 <code>C:\foo</code> 匹配 <code>C:\foobar</code>。</li>
+</ul>
+<hr />
+<h1 id="airagagent">第三部分 · AIRAGAgent 支撑模块</h1>
+<h2 id="31-kb-ragkb_service">3.1 kb/ —— 多知识库 RAG（kb_service 复用）</h2>
+<h3 id="kbmodelspy-crud">kb/models.py —— 两张表的同步 CRUD</h3>
+<ul>
+<li><code>knowledge_bases</code>：scope=global/personal、owner_user_id、is_enabled、is_default（保护）、created_by。</li>
+<li><code>kb_documents</code>：filename/stored_path/file_md5/version/status(pending→processing→ready/failed)/chunk_count。</li>
+<li><code>_KB_SELECT</code> 用两个子查询<strong>实时聚合</strong> doc_count 和 chunk_count——不做冗余列，永远准确。</li>
+<li><code>list_accessible_kb_ids(user_id)</code>（L86）：<strong>检索权限核心</strong>——全局启用库 + 该用户个人启用库。</li>
+<li><code>delete_kb</code>：默认库受保护返回 <code>is_default_protected</code>；删除前把全部文档查出随返回值返回，<strong>资源清理解耦到服务层</strong>。</li>
+<li><code>find_document_by_md5</code>：同库 MD5 查重（DB 有 <code>(kb_id, file_md5)</code> 索引）。</li>
+<li><code>update_document_file</code>：替换时 <code>version+1</code>、status 重置 pending——version 是 Chroma 元数据溯源字段。</li>
+<li>全部同步阻塞 + 短连接，由 FastAPI 路由层 <code>run_in_executor</code> 调用。</li>
+</ul>
+<h3 id="kbservicepy">kb/service.py —— 向量索引/检索/播种（重点）</h3>
+<ul>
+<li><strong>懒加载 + 自愈合</strong> <code>_get_vector_store()</code>（L47-93）：双检锁只初始化一次；初始化后 <code>probe_embeddings</code> 实测嵌入维度，与集合 metadata 里的 <code>provider:dim</code> 签名比对——<strong>切换嵌入提供者时自动清空 kb_store 并后台线程全量重建</strong>（<code>_rebuild_all_kbs</code>）。</li>
+<li>分块：<code>RecursiveCharacterTextSplitter(chunk_size=200, chunk_overlap=20)</code>，separators 含中英文标点。</li>
+<li><code>index_document</code>（L152-199）主流程：置 processing → 按扩展名分派加载器 → 分块 → <strong>每 chunk 注入 <code>kb_id/doc_id/filename/version/chunk_index</code> 五个元数据</strong>（多库隔离全靠 <code>where={"kb_id": ...}</code> 过滤，所有库共用一个 <code>kb_store</code> 集合）→ 锁内<strong>先 delete(where doc_id) 再 add_documents</strong>（幂等）→ 置 ready + chunk_count → 清 RAG 缓存。</li>
+<li><code>index_document_async</code>：daemon 线程异步索引，上传接口立即返回，前端轮询 status。</li>
+<li><code>search_with_scores</code>：单库 <code>{"kb_id": id}</code>、多库 <code>{"kb_id": {"$in": ids}}</code>；分数 clamp 到 [0,1]。</li>
+<li><code>preview_chunks</code>：<code>store.get(where={"doc_id":...})</code> 拿回全部块按 chunk_index 排序后内存分页。</li>
+<li><code>seed_default_kb()</code>：启动播种默认库——遍历 <code>data/</code> 目录，MD5 查重（数据库列，替代旧 md5.txt 机制），新文件登记 <code>source="system"</code> 并同步索引；失败不阻断启动。</li>
+</ul>
+<h3 id="kbembeddingpy">kb/embedding.py —— 嵌入提供者</h3>
+<ul>
+<li><code>OpenAICompatEmbeddings</code>：裸 requests 直连 <code>{base_url}/embeddings</code>，batch_size=20（百炼单批上限），构造时 base_url/key 为空直接 ValueError 快速失败。</li>
+<li>dashscope 分支 key 优先级 <code>embedding_api_key or api_key</code>；openai 分支读 chroma.yml。</li>
+<li><code>probe_embeddings</code> 返回 <code>{ok, dim, latency_ms, error}</code>——自愈合检测的数据源。</li>
+</ul>
+<h2 id="32-rag-rag">3.2 rag/ —— 旧版 RAG 与总结服务</h2>
+<ul>
+<li><code>vector_store.py</code>：<strong>遗留旧版</strong>，单集合 <code>agent</code> + <code>md5.txt</code> 文件去重，构造即扫盘（非懒加载）。与新 <code>kb_store</code> 物理共存于 <code>chroma_ab</code> 目录。旧缺陷：<code>get_file_doucuments</code>（拼写错误）只识别 <code>.txt/.pdf/.xlsx</code> 漏了 <code>.xls</code>。</li>
+<li><code>rag_service.py</code>：<code>RagSummarizeService</code> 是 knowledge SubAgent 的实际入口。检索前先 <code>list_accessible_kb_ids(user_id)</code> 拿可见库；<strong>缓存键 <code>f"u{user_id or 0}|k{sig}|{query}"</code></strong>——用户 + 库签名 + 查询三要素，杜绝跨用户脏读；<code>rag_summarize</code> 现场组链 <code>prompt | print_prompt | model | StrOutputParser()</code>，model 用 <code>get_user_chat_model(user_id)</code> 支持用户自配模型。</li>
+</ul>
+<h2 id="33-modelfactorypy">3.3 model/factory.py —— 模型工厂</h2>
+<ul>
+<li><strong>模块级单例</strong>（L40-41）：<code>chat_model = ChatModelFactory().generator()</code>（<code>ChatDeepSeek(max_tokens=4096, temperature=0.7, request_timeout=240, max_retries=1)</code>）、<code>embed_model</code>——<strong>import 即创建，改配置必须重启进程</strong>。</li>
+<li><code>get_user_chat_model(user_id)</code>（L73-110）：HTTP 调 user_service <code>/internal/user/model-config</code>（带 <code>X-Internal-Call: 1</code> 头），<strong>刻意不缓存</strong>（内部调用 &lt;5ms，用户保存立即生效）。关键分支：base_url 含 <code>api.deepseek.com</code> 必须走 <code>ChatDeepSeek</code> 而非 <code>ChatOpenAI</code>——后者流式会丢弃 <code>delta.reasoning_content</code>，导致 thinking 事件为空。</li>
+</ul>
+<h2 id="34-database-mysql">3.4 database/ —— MySQL 层</h2>
+<h3 id="connectionpy">connection.py</h3>
+<ul>
+<li><code>get_db()</code>：pymysql + DictCursor + autocommit 的 contextmanager，<strong>无连接池</strong>（每次新建 TCP 连接，用简单换可靠）。</li>
+<li><code>init_db()</code>：<code>CREATE TABLE IF NOT EXISTS</code> 建全量 14 张表（conversations/messages/users/login_devices/message_feedback/knowledge_bases/kb_documents/api_call_logs/tool_call_logs/rate_limit_events/plans/plan_steps/user_memories/artifacts）。</li>
+<li><strong><code>_safe_add_column</code> / <code>_safe_add_index</code></strong>：直接执行 ALTER，<strong>try/except 吞掉"已存在"错误</strong>实现幂等迁移——简单粗暴但有效的 schema 演进方式。</li>
+<li><code>_seed_admin_user</code>：播种 <code>admin/admin123</code>，PBKDF2-HMAC-SHA256（32 字节盐、10 万轮、<code>salt_hex:hash_hex</code>）。</li>
+<li><strong>mysql_conf patch 机制</strong>：模块级 <code>mysql_conf</code> 字典在运行时可被微服务原地改写 <code>["database"]</code>——这是 db_patch.py 零侵入重定向的基础。</li>
+</ul>
+<h3 id="modelspy-160">models.py（约 160 行函数）要点</h3>
+<ul>
+<li><code>save_message</code>：新会话取首条消息前 30 字自动起标题；给已软删会话发消息<strong>自动复活</strong>（<code>is_deleted=0</code>）。</li>
+<li><code>truncate_session_messages</code>：编辑重发/重新生成时回滚历史，完事调 <code>invalidate_session</code> 清 Redis 缓存——<strong>DB 与缓存一致性闭环</strong>。</li>
+<li><code>branch_conversation</code>：对话分支，复制 <code>id &lt;= branch_from_message_id</code> 的消息到新会话（<code>executemany</code> 批量），回读新消息直接返回免二次请求。</li>
+<li><code>save_message_feedback</code>：靠 <code>uk_user_conv_role (user_id, conversation_id, message_role)</code> 唯一键 upsert，空串 = 取消（DELETE）。</li>
+<li><code>get_schedule_settings</code>：<strong>双数据源回退</strong>——优先直连 lc_user.user_schedules，失败回退本库 users 表旧列。</li>
+<li>埋点三剑客 <code>log_api_call/log_tool_call/log_rate_limit_event</code>：全部 try/except 吞异常——"埋点失败不影响主流程"。</li>
+<li>看板查询：DAU/WAU/MAU 基于 <code>api_call_logs</code> 去重 user_id 且 <code>user_id &gt; 0</code> 排除未登录。</li>
+</ul>
+<h2 id="35-config-yml">3.5 config/ —— 六份 yml</h2>
+<ul>
+<li><code>rag.yml</code>：DeepSeek 对话模型名、各 API key 占位（环境变量注入）。</li>
+<li><code>chroma.yml</code>：集合名 <code>agent</code>（旧）、persist <code>chroma_ab</code>、k=3、chunk 200/20、嵌入 provider=openai（百炼 compatible-mode）。</li>
+<li><code>mysql.yml</code>：默认库名 <code>agent_records</code>（单体遗留，微服务下被 patch 覆盖）。</li>
+<li><code>redis.yml</code>：连接池 20、session_cache.ttl=3600、rag_cache.ttl=1800、限流 chat 30 次/60s + tool 20 次/60s、任务队列 max_retries=3。</li>
+<li><code>agent.yml</code>：sandbox 策略（C 盘只读、仅 workspace 可写、shell 黑名单、code_timeout_max=60、清华/淘宝镜像）。</li>
+</ul>
+<p><strong>凭证注入机制</strong>（<code>utils/config_handler.py</code> L47-54）：import 时用环境变量覆盖 yml 占位——<code>DEEPSEEK_API_KEY</code>/<code>EMBEDDING_API_KEY</code>/<code>TAVILY_API_KEY</code>/<code>GAODE_API_KEY</code>/<code>OPENAI_EMBEDDING_API_KEY</code>/<code>MYSQL_PASSWORD</code>。密钥不进 git。</p>
+<h2 id="36-utils-infrastructure">3.6 utils/ 与 infrastructure/</h2>
+<ul>
+<li><code>paths.py</code>：<code>PROJECT_ROOT</code> = 仓库根；用户工作区 <code>workspace/{user_id}/{YYYYMMDD}/</code>；<code>cleanup_old_daily_workspaces</code> 只删 8 位纯数字且日期 &gt;30 天的目录。<strong>注意 <code>path_tool.py</code> 的 <code>get_project_root()</code> 是 AIRAGAgent 包目录，与 paths.py 差一级——两套并存的路径约定</strong>。</li>
+<li><code>prompt_loader.py</code>：<code>load_tool_details(tool_names)</code> 用正则从 tools_prompt.txt 按名切出子集——<strong>SubAgent 只注入自己工具的文档，省 token</strong>。</li>
+<li><code>logger_handler.py</code>：按日期日志文件，import 时自动清 7 天前旧日志。</li>
+<li><code>redis_client.py</code>：懒加载连接池 + <code>is_redis_available()</code> ping 探测——<strong>全层降级开关，Redis 挂了缓存/限流/队列全部静默跳过</strong>。</li>
+<li><code>session_cache.py</code>：键 <code>session:{user_id}:{session_id}</code>，命中滑动续期。</li>
+<li><code>rag_cache.py</code>：SCAN 游标分批删前缀键（不用 KEYS，不阻塞 Redis）。</li>
+<li><code>rate_limiter.py</code>：<strong>ZSET 滑动窗口</strong>限流（zremrangebyscore 清窗 → zcard 计数 → zadd → expire），Redis 挂了<strong>放行</strong>（fail-open，限流是保护不是门禁）。</li>
+<li><code>task_queue.py</code>：Redis 队列，三级优先级取任务（到期重试 → priority ZSET → 普通 LPOP）；<code>plan_execute_handler</code> 后台跑 DeepAgent plan。</li>
+</ul>
+<h2 id="37-skills">3.7 skills/ —— 旧技能体系</h2>
+<p><code>SkillRegistry</code> 单例（<code>_skills</code>/<code>_active_skills</code> 双 dict），注册 7 个 skill。这是 SubAgent 体系的前身，<code>middleware.py</code> 的 <code>_find_agent_by_tool</code> 会先查 SubAgentRegistry、失败回退 SkillRegistry——<strong>新旧体系共存期的兼容设计</strong>。</p>
+<hr />
+<h1 id="services">第四部分 · services/ —— 六个微服务</h1>
+<h2 id="40-core">4.0 公共 core/ 库（每服务内嵌一份副本，绝对解耦）</h2>
+<p>设计哲学：<strong>每个服务自带 core/ 副本，可脱离项目根目录独立部署</strong>（注释原文），无共享包依赖。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>要点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>config.py</code></td>
+<td>纯环境变量；端口/库名兼容新旧变量名（<code>PORT or AUTH_PORT or 8001</code>）；<code>get_service_url(name)</code> 是<strong>白名单式</strong>跨服务地址表（auth 只许调 user，admin 许调 auth/user/chat，未登记直接 raise）</td>
+</tr>
+<tr>
+<td><code>base_app.py</code></td>
+<td><code>create_app(service_name, on_startup, on_shutdown)</code>：CORS 全放开、lifespan、内置 <code>GET /api/health</code></td>
+</tr>
+<tr>
+<td><code>db.py</code></td>
+<td>pymysql 短连接 contextmanager；<code>ensure_database_exists()</code></td>
+</tr>
+<tr>
+<td><code>jwt_auth.py</code></td>
+<td><strong>共享密钥独立验签，不查库</strong>（"JWT 有效即视为可信"）；<code>get_current_user</code> 支持 <strong>Bearer 头 + <code>?token=</code> query 两种方式</strong>（后者为 SSE/文件下载预留）；<code>get_admin_user</code> = role=admin + IP 白名单；<code>get_client_ip</code> 依次取 X-Real-IP → X-Forwarded-For → client.host</td>
+</tr>
+<tr>
+<td><code>http_client.py</code></td>
+<td><code>ServiceClient</code>（httpx.AsyncClient，15s 超时，自动带 <code>X-Internal-Call: 1</code> 头，<strong>服务间 127.0.0.1 直连不走 nginx</strong>）</td>
+</tr>
+<tr>
+<td><code>redis_client.py</code></td>
+<td>全局单例连接池，<code>is_redis_available()</code> ping 探测</td>
+</tr>
+<tr>
+<td><code>events.py</code></td>
+<td><strong>仅 chat 和 admin 有</strong>：三个频道 <code>events:chat.completed</code> / <code>events:rate.limited</code> / <code>events:tool.called</code>；<code>subscribe_events</code> daemon 线程阻塞循环 + threading.Event 优雅停止</td>
+</tr>
+</tbody>
+</table>
+<p><strong>core 差异</strong>：chat 没有 http_client（不主动调别的服务，引擎直连 user_service）但有 events；kb 没有 http_client/events（纯被调方）；file 没有 db/http_client/events（文件系统即存储）。</p>
+<h2 id="41-auth_service8001lc_auth">4.1 auth_service（:8001，lc_auth）</h2>
+<p>15 个路由：注册/登录/me/密保找回（question + reset）/改密/密保设置/设备三件套（list/delete/revoke-all-others）+ 5 个内部接口。</p>
+<p><strong>关键逻辑</strong>：
+- <strong>register/login</strong>：同步 DB 操作一律 <code>run_in_executor</code> 包装不阻塞事件循环；签发 JWT 时生成 <code>device_token = secrets.token_hex(16)</code> 写入 payload 并落 <code>login_devices</code> 表；注册后调 user_service <code>/internal/user/profile</code> 同步建档——<strong>失败仅 warn（最终一致性）</strong>。
+- <strong>密码哈希</strong>：PBKDF2-HMAC-SHA256，32 字节随机盐，10 万轮，<code>salt_hex:hash_hex</code> 存储。密保答案 strip+lower 后同算法（大小写不敏感）。
+- <strong>admin 保护</strong>：登录时 admin 需过 IP 白名单；<code>delete_user</code>/<code>reset_user_password</code> 遇 role=admin 直接拒绝。
+- <strong>设备管理</strong>：<code>ON DUPLICATE KEY UPDATE</code>（uk=device_token）实现同 token 再登录刷新活跃并取消吊销；UA 粗解析 OS/浏览器/设备类型。</p>
+<p>建表：<code>users</code>（username UNIQUE）、<code>security_questions</code>（user_id UNIQUE 一人一题）、<code>login_devices</code>（uk_device_token + is_revoked 软下线）。</p>
+<h2 id="42-user_service8002lc_user">4.2 user_service（:8002，lc_user）</h2>
+<p><strong>三表均以 user_id 为主键</strong>（与 auth.users.id 逻辑外键、物理分离）：<code>user_profiles</code> / <code>user_schedules</code> / <code>user_models</code>。</p>
+<ul>
+<li><strong>头像</strong>：类型白名单双校验（content_type + 扩展名），≤5MB，<code>avatar_{user_id}_{uuid8}{ext}</code>，upsert 更新；静态路由防路径穿越（拒绝含 <code>/</code>、<code>\</code>、<code>..</code> 的文件名）。</li>
+<li><strong>课表上传五步流水线</strong>：后缀校验 → ≤2MB → start_date 格式校验 → <strong>pandas 预校验 Excel 结构</strong>（<code>header=2, index_col=0</code>，必须含星期一~星期天七列，缺列给中文清单）→ 覆盖式保存固定文件名 <code>schedule_{user_id}.xlsx</code>。</li>
+<li><strong>模型配置</strong>：对外 GET 走 <code>_mask_api_key</code> 脱敏（<code>sk-abcd****wxyz</code>）；<code>/internal/user/model-config</code> 返回明文 key，<strong>是全项目唯一带 <code>X-Internal-Call</code> 头校验的内部接口</strong>。</li>
+<li><strong>注销账号 saga</strong>：① auth 删认证（admin 被拦截即终止）→ ② 清课表文件 + 三表 → ③ 尽力而为调 chat 清会话。<strong>已知 bug</strong>：调的是 <code>/internal/chat/users/{id}/data</code> 而 chat 实际暴露 <code>/cleanup</code>，404 被 warn 吞掉。</li>
+</ul>
+<h2 id="43-chat_service8003lc_chat">4.3 chat_service（:8003，lc_chat）—— 核心服务</h2>
+<h3 id="mainpypost-apichat">main.py：<code>POST /api/chat</code> 处理流程</h3>
+<ol>
+<li>手动解析 client_ip（X-Real-IP → X-Forwarded-For → client.host）。</li>
+<li><strong>set 四个 ContextVar</strong>（user_ip/lat/lon/user_id）。</li>
+<li><strong>限流</strong>：<code>get_chat_rate_limiter().is_allowed(client_ip)</code>（ZSET 滑动窗口 30 次/60s，fail-open）；超限发 <code>rate.limited</code> 事件 + 429。</li>
+<li>有 <code>uploaded_file_path</code> 时在消息前拼 <code>[用户已上传Word文件，服务器路径为：...]</code>。</li>
+<li>流式返回 <code>StreamingResponse(generate_sse_stream(...), media_type="text/event-stream")</code>，响应头：
+   <code>python
+   {"Cache-Control": "no-cache", "X-Accel-Buffering": "no",  # 关 nginx 缓冲，SSE 必需
+    "X-RateLimit-Limit": ..., "X-RateLimit-Remaining": ...}</code>
+   SSE 帧 <code>data: {json}\n\n</code>，末尾 <code>data: [DONE]\n\n</code>。</li>
+</ol>
+<p>启动钩子：<code>init_db()</code>（幂等建表）→ <code>register_default_handlers()</code>（Redis 任务队列）→ <code>cleanup_old_daily_workspaces()</code>（清 30 天前日期目录）。</p>
+<h3 id="agentpy">agent.py：同步生成器 → 异步流的桥接（经典问题）</h3>
+<pre><code class="language-python">queue: asyncio.Queue = asyncio.Queue()
+SENTINEL = object()
+ctx = contextvars.copy_context()                     # 拷贝请求上下文
+def sync_producer():
+    for chunk in self.agent.execute_stream(...):     # 同步生成器在线程池里跑
+        loop.call_soon_threadsafe(queue.put_nowait, chunk)   # 跨线程安全入队
+    loop.call_soon_threadsafe(queue.put_nowait, SENTINEL)
+loop.run_in_executor(None, lambda: ctx.run(sync_producer))
+</code></pre>
+<p>三个要点：
+- <strong><code>loop.call_soon_threadsafe(queue.put_nowait, item)</code></strong>：工作线程不能直接 await queue.put，把入队调度回事件循环线程——线程→asyncio 的标准桥。
+- <strong><code>ctx.run(sync_producer)</code></strong>：保证工作线程里 <code>user_ip_var.get()</code> 等读到请求上下文。
+- <strong>哨兵 + 错误透传</strong>：异常也入队，消费侧 <code>isinstance(item, Exception)</code> 时置错误标记并 raise，埋点能记录失败。</p>
+<p><strong>finally 埋点</strong>：无论正常/异常/断连，算 duration_ms + 粗估 tokens（中文 1 字 = 1 token，其余 4 字符 = 1 token）→ <code>log_api_call</code> 写 lc_chat → <code>publish_event(CHANNEL_CHAT_COMPLETED)</code> 发 admin。埋点自身再套 try/except。</p>
+<p><strong>会话持久化</strong>：支持 <code>truncate_to</code> 历史回滚；结束后 save_message 写 user/assistant 两条 + 回写 Redis 缓存 + 补发 <code>message_ids</code> 事件（前端用于反馈/分叉）。</p>
+<h3 id="db_patchpy-db">db_patch.py：零侵入 DB 重定向（全架构最巧妙的一笔）</h3>
+<pre><code class="language-python">_conn.mysql_conf[&quot;database&quot;] = DB_NAME   # 原地改字典！AIRAGAgent 几千行代码零改动落到 lc_chat
+</code></pre>
+<ul>
+<li>必须在 import AIRAGAgent 业务模块<strong>之前</strong>完成。</li>
+<li>同时替换 <code>log_rate_limit_event</code> 为发 Redis 事件版本（表在 lc_admin 不在 lc_chat）；包装 <code>log_tool_call</code> 先写库再发事件。</li>
+<li><code>_DB_PATCHED</code> 标志保证幂等。</li>
+</ul>
+<h3 id="_2">其余路由</h3>
+<p>会话 CRUD/search/branch/meta、feedback、<code>POST /api/plan</code>（stream 或 background 投 Redis 队列）、<code>GET /api/plans</code>、<code>GET /api/subagents</code>（前端能力卡片）、<code>GET /api/tasks/{task_id}</code>（后台任务轮询）、内部接口（admin 查会话、注销清理）。</p>
+<h2 id="44-kb_service8004lc_kb">4.4 kb_service（:8004，lc_kb）</h2>
+<p>28 个路由，三层结构：<strong>路由层 → kb_models（MySQL 元数据）+ AIRAGAgent kb/service（Chroma 向量）</strong>。</p>
+<ul>
+<li>模块加载时直接 <code>_conn.mysql_conf["database"] = DB_NAME</code> 重定向（与 chat 同套路）。</li>
+<li><strong>管理端</strong> <code>/api/admin/kb/*</code>（get_admin_user）：list/create/patch/delete、文档 CRUD、chunks 预览（limit≤100）、rebuild、search-test、embedding-status。</li>
+<li><strong>用户端</strong> <code>/api/kb/mine/*</code>：个人库上限 20 个、单次上传 ≤20 文件、归属校验 <code>_user_kb_or_403</code>；<code>GET /api/kb/mine</code> 同时返回 mine + 启用的 global_kbs。</li>
+<li><strong>内部</strong> <code>/internal/kb/search</code>：供 chat 的 RAG 检索。</li>
+</ul>
+<p><strong>上传流水线（MD5 去重）</strong>：</p>
+<pre><code class="language-python">rel_path, md5 = _save_upload(kb_id, content, ext)   # 存 uploads/kb/{kb_id}/{md5}.{ext}，内容寻址
+dup = kb_models.find_document_by_md5(kb_id, md5)    # 库内查重
+if dup: return {&quot;ok&quot;: False, &quot;error&quot;: &quot;与现有文档「...」内容重复，已跳过&quot;}
+doc = kb_models.create_document(...)
+kb_service.index_document_async(doc[&quot;id&quot;])          # 后台线程索引，前端轮询 status
+</code></pre>
+<ul>
+<li>替换：MD5 相同直接 400"无需替换"；否则 version+1 → 删旧物理文件 → 异步重索引。</li>
+<li>删除：先删 Chroma 向量（<code>where={"doc_id":...}</code>）→ 删 DB → 删物理文件，<code>_delete_physical_file</code> 用 <code>os.path.commonpath</code> 白名单防护防误删。</li>
+<li>启动钩子：<code>seed_default_kb()</code> 播种默认库。</li>
+<li>改 <code>is_enabled</code> 后调 <code>_invalidate_cache()</code> 刷新 RAG 检索缓存。</li>
+</ul>
+<h2 id="45-admin_service8005lc_admin">4.5 admin_service（:8005，lc_admin）</h2>
+<p><strong>双重角色</strong>：管理后台 API + Redis 事件订阅落库方。</p>
+<ul>
+<li><code>on_startup</code> 注册三个订阅（daemon 线程 <code>pubsub.listen()</code> 阻塞循环）：<code>chat.completed → api_call_logs</code>、<code>tool.called → tool_call_logs</code>、<code>rate.limited → rate_limit_events</code>。<strong>lc_admin 三表是 lc_chat 的最终一致副本</strong>——事件丢失可接受（"统计略有偏差"），换来统计查询不打业务库。</li>
+<li>设计瑕疵：<code>pubsub.listen()</code> 阻塞迭代，stop_event 要等下一条消息才被检查到——但线程是 daemon，进程退出不受影响。</li>
+<li>路由（全部 get_admin_user）：用户列表（auth 拉全量 + <code>asyncio.gather</code> 并发调 user 补资料）、用户会话（透传 chat）、删用户三步级联、重置密码（默认 <code>123456789</code>）、看板四接口（overview/trends/tools/top，days 钳 [1,365]）。</li>
+<li>跨服务调用统一从 <code>Authorization</code> 头剥 Bearer 后<strong>透传 JWT</strong>。</li>
+<li><strong>已知妥协</strong>：<code>get_dashboard_top_questions</code> 恒返回空——消息内容在 lc_chat，需要 chat 提供内部接口或新增事件频道才能启用。</li>
+</ul>
+<h2 id="46-file_service8006-db">4.6 file_service（:8006，无 DB）</h2>
+<ul>
+<li><code>POST /api/upload-word</code> / <code>GET /api/download/{filename}</code>：<strong>无鉴权</strong>（依赖内网/网关隔离，"内部接口"思路延伸到公开路由——值得复盘的安全点）。</li>
+<li>工作区三接口（list/download/preview）JWT 鉴权，<code>_resolve_workspace_path</code> 防穿越：反斜杠归一 → 拒绝 <code>..</code> → <code>Path.resolve()</code> 后 <code>relative_to(workspace/{user_id})</code> 校验。</li>
+<li><code>.playwright</code> 及所有 <code>.</code> 开头条目隐藏；条目带 <code>is_image</code>/<code>is_text</code> 标记供前端决定 <code>&lt;img&gt;</code> 直显或文本预览。</li>
+</ul>
+<h2 id="47-startbat">4.7 start.bat 差异</h2>
+<p>六个服务各一份，统一套路（优先项目根 .venv）。<strong>chat 和 kb 多两行</strong>：<code>set AGENT_HOME=..\..</code> 和 <code>set PYTHONPATH=%AGENT_HOME%;%PYTHONPATH%</code>——因为它们要 import 项目根的 AIRAGAgent 引擎；其余四个完全自包含。</p>
+<hr />
+<h1 id="frontend-vue-3">第五部分 · frontend/ —— Vue 3 前端</h1>
+<blockquote>
+<p><strong>先说一个与 README 不符的事实</strong>：markdown-it、vue-virtual-scroller 在 package.json 里但<strong>全库无任何 import</strong>（冗余依赖）；Markdown 渲染是自研零依赖渲染器 <code>utils/markdown.js</code>；没有 defineAsyncComponent、没有 manualChunks、没有 50ms 节流。懒加载靠<strong>路由级 <code>() =&gt; import()</code> 动态导入</strong>。</p>
+</blockquote>
+<h2 id="51">5.1 工程配置</h2>
+<ul>
+<li><code>vite.config.js</code>：双模式代理——设了 <code>VITE_API_TARGET</code> 全部 <code>/api</code> 走单一目标（生产 nginx）；否则 <code>microserviceProxy()</code> 按 URL 前缀分发到 8001-8006。<strong>vite proxy key 为前缀匹配按定义顺序</strong>，所以 <code>/api/user/password|security-question|devices</code>（→8001 auth）必须放在 <code>/api/user/profile|avatar|schedule|model|account</code>（→8002 user）之前。</li>
+<li><code>main.js</code>：<strong>先 <code>initTheme()</code> 再 mount</strong>——首帧渲染前写 <code>data-theme</code>，避免主题闪烁（FOUC）。</li>
+<li><code>router/index.js</code>：6 条路由全部动态导入；守卫用模块级 <code>tokenVerified</code> 缓存避免每次跳转打 <code>/api/auth/me</code>；网络异常放行（"避免离线时被卡住"）；<strong>角色互斥</strong>——admin 登录后访问 <code>/</code> 重定向到 <code>/admin</code>，反之亦然；未登录访问带 <code>?redirect=</code> 供登录后回跳。</li>
+</ul>
+<h2 id="52-apichatjs-sse">5.2 api/chat.js —— SSE 消费核心</h2>
+<p><strong>不是 EventSource，而是 <code>fetch + ReadableStream</code></strong>（需要 POST + Authorization 头，EventSource 做不到）：</p>
+<pre><code class="language-js">const reader = response.body.getReader()
+buffer += decoder.decode(value, { stream: true })   // 防多字节字符截断
+const lines = buffer.split('\n')
+buffer = lines.pop() || ''                          // 末行不完整留到下一轮
+for (const line of lines) {
+  if (line.startsWith('data: ')) {
+    const data = line.substring(6).trim()
+    if (data === '[DONE]') continue
+    const parsed = JSON.parse(data)                 // 失败兜底：原文当 output 追加
+    ...
+  }
+}
+</code></pre>
+<p>事件分发：<code>thinking → onThinking</code>、<code>output → onOutput(delta, fullOutput)</code>（<strong>同时传增量和全量</strong>，useChat 用全量直接覆盖天然防丢字）、<code>message_ids</code>、<code>plan_*</code>/<code>step_*</code> 前缀透传给可选 <code>onEvent</code>（不传 onEvent 的旧调用方零改动兼容）。401 → logout 跳登录；429 → 抛限流文案；<code>AbortError</code> 直接上抛供"停止生成"识别。</p>
+<p>请求体：<code>{message, session_id, stream:true}</code> + 可选 <code>latitude/longitude</code>、<code>uploaded_file_path</code>、<code>truncate_to</code>。</p>
+<h2 id="53-usechatjs-866-pinia">5.3 useChat.js —— 全应用状态中枢（866 行，无 Pinia）</h2>
+<p><strong>最重要的设计决策——模块级单例</strong>：</p>
+<pre><code class="language-js">// 放到模块作用域，ChatView 路由切换（mount/unmount）时不销毁。
+// 否则流式生成中切到&quot;我的知识库&quot;再返回，pendingStreams 会丢失
+const pendingStreams = ref(new Map())  // sessionId -&gt; { controller, streamingContent, thinkingContent, ... }
+</code></pre>
+<p><strong>天然支持多会话并发流式</strong>——A 会话还在生成时切到 B 会话，A 的流在后台继续跑。</p>
+<h3 id="sendmessage">sendMessage 流程要点</h3>
+<ol>
+<li>防重入：同一会话流式中禁止再发。</li>
+<li>push user 消息 → 自动标题（首条前 30 字，除非用户手动改过）→ bump 置顶。</li>
+<li>push reactive assistantMsg 占位 <code>{streaming:true, plan:null, steps:{}}</code>。</li>
+<li><code>markRaw(new AbortController())</code>——<strong>markRaw 避免 Vue 对 controller 做响应式代理</strong>。</li>
+<li>首次发送用 <code>navigator.geolocation</code> 拿经纬度（10s 超时，失败缓存不再重复请求）。</li>
+<li><code>onMessageIds</code> 把后端真实消息 id 存到 <strong><code>dbId</code> 字段而非覆盖 <code>id</code></strong>——覆盖 <code>id</code> 会让 <code>v-for :key</code> 变化导致组件重挂载，"流式结束后内容短暂消失再出现的闪烁"。</li>
+<li><code>onEvent</code> 里是 <strong>step 状态机</strong>：plan_created 初始化每 step 的 <code>{status:'pending', thinking:'', output:''}</code>；step_started → running；step_thinking/output 增量追加；step_completed → done；step_failed → failed。</li>
+</ol>
+<h3 id="_3">前后端历史一致性</h3>
+<ul>
+<li><code>regenerateMessage(assistantMsg)</code>：<strong>向前找最近的 user 消息</strong>作为问题（否则 <code>[U1,A1,U2,A2]</code> 重生成 A1 会错把 U2 当问题）。</li>
+<li><code>regenerateFromUserIndex</code> / <code>editAndResend</code>：本地 <code>splice</code> 截断 + <code>truncate_to</code> 发后端同步回滚，<strong>前后端上下文一致</strong>。</li>
+</ul>
+<h3 id="_4">防丢失三件套</h3>
+<ol>
+<li>模块级单例防路由切换丢失；</li>
+<li><code>loadConversations</code> 单次加载保护 + <strong>先把正在流式的本地会话摘出来，后端数据填充后再覆盖回去</strong>——防后端旧数据覆盖进行中内容；</li>
+<li><code>resetChatState()</code> 登出/注销/登录时 abort 全部流并清空——防串号看到上一个用户的会话。</li>
+</ol>
+<h2 id="54">5.4 视图与组件要点</h2>
+<ul>
+<li><strong>ChatView.vue</strong>（~2000 行）：侧边栏（搜索 220ms 防抖、会话五操作、分支会话 <code>↳</code> 标记）+ TransitionGroup 消息流 + 5 个 SideDrawer（知识库/工作区/计划历史/Agent 能力/设置）。滚动管理完整：80px 阈值判 isAtBottom、三个 watch 自动滚底、不在底部累计 newMessageCount 显示 FAB。鼠标光晕用 <strong>requestAnimationFrame 合并 mousemove</strong> 只改 transform（合成层不触发布局）。</li>
+<li><strong>MessageBubble.vue</strong>：<code>computed(() =&gt; renderMarkdown(content))</code>——流式期间每个 delta 触发完整重渲染，靠自研渲染器足够轻（纯正则无 AST）保证性能。代码块复制用<strong>事件委托</strong>（<code>e.target.closest('.code-copy-btn')</code> + <code>data-copy</code> 属性 encodeURIComponent 注入）。思考过程 <code>&lt;details open&gt;</code> 折叠面板。</li>
+<li><strong>PlanPanel.vue</strong>：静态 plan 结构 + 流式 steps map 合并渲染；四态视觉（running 旋转/done ✓/failed ✗/pending ○）。</li>
+<li><strong>KbManager.vue</strong>（~2000 行，最复杂组件，scope prop 一套代码三场景）：拖拽用 <strong><code>dragDepth</code> 计数器</strong>（dragenter++/dragleave--）解决子元素进出遮罩闪烁；上传进度用 <strong>XMLHttpRequest</strong>（fetch 拿不到 upload progress），进度到 1 后切 indeterminate 表示"服务器处理中（写入+索引）"；索引状态 2s 轮询；分块预览分页；检索 playground 带相似度百分比条。</li>
+<li><strong>file.js</strong>：下载/预览带 Bearer token 不能 <code>&lt;a href&gt;</code> 直链，走 fetch → blob → <code>URL.createObjectURL</code> → 动态 <code>&lt;a download&gt;</code> 点击 → <code>revokeObjectURL</code> 完整链路。</li>
+<li><strong>utils/markdown.js</strong>：自研渲染器管线——代码块/公式先抽占位（<code>\u0000CODEBLOCK_n\u0000</code>）→ HTML 转义 → 逐行状态机（GFM 表格需当前行含 <code>|</code> 且下一行是 <code>|---|</code>）→ 还原占位。<code>renderMath()</code> 极简 LaTeX→HTML（上下标/frac/sqrt/希腊字母），复杂公式兜底保留原文。</li>
+<li><strong>global.css</strong>："黑白极简 · 纸与墨"设计系统——<code>#fafafa</code> 纸面 + <code>#161616</code> 墨黑，<code>[data-theme="dark"]</code> 整套变量反转；玻璃拟态三档、<code>body::after</code> 叠 SVG feTurbulence 噪点纹理（opacity 0.04）纸面质感。</li>
+</ul>
+<p><strong>死代码</strong>：<code>WelcomeScreen.vue</code> 全库无引用（ChatView 内联了自己的 welcome hero）。</p>
+<hr />
+<h1 id="_5">第六部分 · 部署 / 迁移 / 构建 / 测试</h1>
+<h2 id="61-deploy">6.1 deploy/</h2>
+<ul>
+<li><strong><code>deploy_to_server.py</code></strong>：paramiko 裸机部署到 <code>81.70.100.57</code>。凭据全走环境变量（<code>LC_SERVER_*</code>，未设密码直接 SystemExit，不硬编码）。6 步流程：建连 → 环境探查 → <strong><code>sudo rm -rf /opt/lc-course/backend</code> 全量覆盖</strong>（非增量！）→ SFTP 递归上传 → 前端全量替换 <code>/var/www/lc-course-frontend</code> → nginx 配置自适应（探测 Debian <code>sites-available</code> 还是 RHEL <code>conf.d</code> 风格）。<code>sudo_cmd</code> 用 <code>echo '密码' | sudo -S</code> 提权。"自动上传 + 手动启动"半自动模式。</li>
+<li><strong><code>start_microservices.sh/.bat</code></strong>：<code>set -a; . .env; set +a</code> 导出环境 → <code>uv sync --frozen</code> → <code>export PYTHONPATH=项目根</code> → 逐服务 <code>nohup uvicorn main:app --app-dir .</code> 后台启动，PID 写 <code>AIRAGAgent/logs/</code>。stop 脚本遍历 PID 文件 kill。</li>
+<li><strong><code>nginx.conf</code>（前端）</strong>：SPA 回退 <code>try_files $uri $uri/ /index.html</code>；<code>/assets/</code> 30 天 immutable 缓存；<strong>SSE 专项</strong>：<code>proxy_buffering off; proxy_cache off; proxy_read_timeout 3600s</code>。</li>
+<li><strong><code>nginx_microservices.conf</code></strong>：微服务路由表——<code>/api/user/</code> 前缀被 auth/user 两服务共享（password|security-question|devices → 8001，profile|avatar|schedule|model|account → 8002），正则优先级体现了这个设计。</li>
+</ul>
+<h2 id="62-migrations-alembic-env-5">6.2 migrations/ —— 一套 alembic env 跑 5 个库</h2>
+<ul>
+<li><code>env.py</code> 用 <strong><code>-x target=&lt;auth|user|chat|kb|admin&gt;</code></strong> 命令行参数动态切换：<code>version_table = alembic_version_&lt;target&gt;</code>（每库独立版本表）+ <code>version_locations = migrations/versions/&lt;target&gt;</code>（每库独立迁移链）。</li>
+<li>每个 target 只有一个 <code>0001_baseline.py</code>，<code>branch_labels=("&lt;target&gt;",)</code>——所以 migrator 用 <code>alembic -x target=$t upgrade ${t}@head</code> 寻址消除多 head 歧义。</li>
+<li><strong>无 ORM，migration 用 <code>op.execute()</code> 写 raw SQL</strong>，全部 <code>CREATE TABLE IF NOT EXISTS</code> 幂等。</li>
+<li>chat 库 baseline 最重（9 张表）；<code>plan_steps.plan_id</code> 有<strong>全项目唯一显式外键</strong> <code>ON DELETE CASCADE</code>。</li>
+</ul>
+<h2 id="63-dockerfile">6.3 Dockerfile —— 多阶段构建</h2>
+<ol>
+<li><code>deps</code>：python:3.13-slim + 中文字体 + <code>uv export --frozen</code> 从 uv.lock 导出精确依赖（可复现）。</li>
+<li><code>agent-deps</code>：装 Playwright Chromium（npmmirror 加速），仅 chat/kb 需要。</li>
+<li><code>code-light</code>（auth/user/admin/file）：只 COPY <code>services/${SERVICE}/</code>，镜像最小；<code>CMD exec ... uvicorn</code>（exec 让 uvicorn 接管 PID 1 正确收 SIGTERM）。</li>
+<li><code>code-agent</code>（chat/kb）：<code>COPY . /app/</code>（整个 AIRAGAgent 引擎）+ <code>PYTHONPATH=/app</code>。</li>
+</ol>
+<h2 id="64-tests-pytest">6.4 tests/ —— pytest 体系</h2>
+<ul>
+<li><strong>顶层 conftest 的隔离加载</strong>：各服务 <code>main.py</code> 用服务内相对导入（<code>from core import ...</code>），不同服务的 <code>core</code>/<code>models</code> 包名相同会互相污染——<code>load_service_main</code> 先删 <code>sys.modules</code> 残留的 <code>core*</code>/<code>models*</code> 缓存，再以唯一模块名加载。建议按服务分目录跑：<code>pytest tests/auth_service/ -v</code>。</li>
+<li><strong>测试库隔离</strong>：<code>lc_auth_test</code>/<code>lc_kb_test</code> 独立库，session 级建表（内嵌 SCHEMA_SQL 与生产对齐），每用例 TRUNCATE 清理；外部依赖全 mock（auth 屏蔽跨服务调用、kb 屏蔽全部 Chroma/嵌入调用换同步 no-op）。</li>
+<li><strong>覆盖</strong>：auth 5 文件（注册登录流程/账号安全/设备/内部接口含"不能删 admin"保护/health）；kb 4 文件（管理端 CRUD/用户端 CRUD/越权矩阵/health）；另有 user/chat/admin/file/agent_core（orchestrator、plan_logic、sub_agent 注册表、rate_limiter 纯单测）。</li>
+<li>pytest 配置：<code>addopts = "-p no:langsmith"</code>（langsmith 插件与 pydantic 版本不兼容）。</li>
+</ul>
+<h2 id="65">6.5 其他目录</h2>
+<ul>
+<li><code>static/</code>：单体模式的前端托管备用（<code>SERVE_STATIC=true</code>）。</li>
+<li><code>uploads/</code>：<code>avatars/</code>、<code>kb/{kb_id}/{md5}.{ext}</code>（内容寻址去重）、<code>artifacts/</code>、<code>screenshots/</code>。</li>
+<li><code>workspace/</code>：<code>{user_id}/{YYYYMMDD}/tasks/{plan_id}/</code> 三级隔离 + <code>.playwright/</code> 浏览器二进制。</li>
+<li><code>chroma_ab/</code>：Chroma 持久化（<code>agent</code> 旧集合 + <code>kb_store</code> 新集合共存）。</li>
+<li><code>services/migrate_to_microservices.py</code>：历史一次性脚本，把旧单体库 <code>agent_records</code> 拆成 5 个微服务库（幂等可重跑、保留原自增 ID、保留旧库做回滚备份）。</li>
+</ul>
+<hr />
+<h1 id="_6">第七部分 · 贯穿全局的十大设计精髓（复习重点）</h1>
+<ol>
+<li><strong>ContextVar 链</strong>：FastAPI 注入用户上下文（user_id/ip/lat/lon）→ Orchestrator 注入计划上下文（plan_id/session_id/step_idx）→ 工具层消费；并行时 <code>copy_context().copy()</code> 跨线程传递（Context 非线程安全，直接共享报 "already entered"）。</li>
+<li><strong>同步生成器 → 异步 SSE 桥</strong>：<code>asyncio.Queue</code> + <code>loop.call_soon_threadsafe(queue.put_nowait, item)</code> + <code>ctx.run(sync_producer)</code> + SENTINEL 哨兵。</li>
+<li><strong>db_patch 零侵入重定向</strong>：<code>_conn.mysql_conf["database"] = DB_NAME</code> 原地改字典，几千行引擎代码零改动落到微服务库。</li>
+<li><strong>generator 既流式又返回值</strong>：<code>next()</code> 循环 + <code>StopIteration.value</code> 取 PlanSpec。</li>
+<li><strong>多知识库隔离三处落地</strong>：MySQL 按 owner_user_id/scope、Chroma 按 <code>kb_id</code> 元数据 filter（单集合 kb_store）、Redis 缓存键内嵌 <code>u{uid}|k{sig}</code> 签名。</li>
+<li><strong>事件驱动统计</strong>：chat 生产 → Redis Pub/Sub → admin 消费落库，lc_admin 三表是最终一致副本，统计查询不打业务库。</li>
+<li><strong>降级哲学（可用性 &gt; 一致性）</strong>：Redis 挂了缓存/限流/队列全部静默放行或跳过；埋点写库失败吞异常；kb 播种失败不阻断启动；嵌入切换自动清库重建自愈。</li>
+<li><strong>JWT 共享密钥独立验签</strong>：不查库不回调 auth；Bearer + <code>?token=</code> 双通道（SSE/img 场景）；<code>/internal/*</code> 无鉴权靠内网拓扑隔离（唯 model-config 带 <code>X-Internal-Call</code> 头，因为返回明文 api_key）。</li>
+<li><strong>LLM 友好设计</strong>：403 错误信息附"可尝试 fetch_url_rendered"自愈线索；SubAgent 只注入自己工具的文档（省 token）； Planner 纯文本 JSON（DeepSeek thinking 不支持 tool_choice）+ <code>_extract_json</code> 容错。</li>
+<li><strong>前端防丢失三件套</strong>：useChat 模块级单例、流式会话合并回写、<code>dbId</code> 与 <code>id</code> 分离防 v-for key 闪烁。</li>
+</ol>
+<hr />
+<h1 id="_7">第八部分 · 已知坑与瑕疵清单（复盘用）</h1>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>位置</th>
+<th>问题</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>user_service 注销</td>
+<td>调 chat 用 <code>/internal/chat/users/{id}/data</code>，实际暴露的是 <code>/cleanup</code>——404 被 warn 吞掉，<strong>会话数据其实没清</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td>admin_service</td>
+<td><code>top_questions</code> 恒返回空（消息内容在 lc_chat）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>file_service</td>
+<td><code>/api/upload-word</code>、<code>/api/download/{filename}</code> 无鉴权，靠网关隔离</td>
+</tr>
+<tr>
+<td>4</td>
+<td>sandbox_config.py</td>
+<td>docstring 说"readonly 优先"，实际代码是 writable 优先</td>
+</tr>
+<tr>
+<td>5</td>
+<td>file_tools.py</td>
+<td><code>auto_fill_word</code> 成功后<strong>删除模板文件</strong>（破坏性）</td>
+</tr>
+<tr>
+<td>6</td>
+<td>agent_tools.py</td>
+<td><code>get_user_id</code> 无上下文时返回随机假 ID（旧演示遗留）</td>
+</tr>
+<tr>
+<td>7</td>
+<td>artifact_tools.py</td>
+<td>导入了 <code>_db_create</code> 却绕过直接 pymysql INSERT（坏味道）</td>
+</tr>
+<tr>
+<td>8</td>
+<td>middleware.py</td>
+<td>函数名 <code>_log_tool_call埋点</code> 中英混用</td>
+</tr>
+<tr>
+<td>9</td>
+<td>frontend</td>
+<td>markdown-it、vue-virtual-scroller 冗余依赖；WelcomeScreen.vue 死代码；Login.vue 无找回密码 UI（API 层已就绪）</td>
+</tr>
+<tr>
+<td>10</td>
+<td>admin_service</td>
+<td>事件订阅线程要等下一条消息才响应 stop_event（daemon 线程兜底，无实际影响）</td>
+</tr>
+<tr>
+<td>11</td>
+<td>rag/vector_store.py</td>
+<td>旧版遗留：<code>get_file_doucuments</code> 拼写错误、漏 <code>.xls</code>；<code>file_handler.listdir_with_allowed_type</code> 路径非法时返回值类型错误</td>
+</tr>
+<tr>
+<td>12</td>
+<td>search_tools.py</td>
+<td>Tavily <code>max_results=1</code> 结果单薄</td>
+</tr>
+<tr>
+<td>13</td>
+<td>model/factory.py</td>
+<td>import 即创建单例，改配置必须重启进程</td>
+</tr>
+<tr>
+<td>14</td>
+<td>chat_service init_db</td>
+<td>会把单体时代全部 14 张表建到 lc_chat（冗余但无害；权威 schema 是 alembic baseline）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h1 id="_8">第九部分 · 一条请求的完整生命周期（串线复习）</h1>
+<p>以「用户问：帮我查下北京天气，写进 Word 报告」为例：</p>
+<ol>
+<li><strong>前端</strong> ChatInput → <code>useChat.sendMessage</code> → push user 消息 → <code>api/chat.js</code> fetch POST <code>/api/chat</code>（Bearer + 经纬度）。</li>
+<li><strong>chat_service/main.py</strong>：解析 IP → set 4 个 ContextVar → ZSET 滑动窗口限流 → <code>StreamingResponse</code>。</li>
+<li><strong>chat_service/agent.py</strong>：<code>copy_context()</code> → 线程池跑 <code>Orchestrator.execute_stream</code> → <code>call_soon_threadsafe</code> 入队 → 消费侧逐 chunk yield SSE。</li>
+<li><strong>Orchestrator</strong>：召回长期记忆 → <strong>Planner</strong> 流式思考（前端 thinking 面板实时滚动）→ 解析 JSON 出 2 步计划（step0 weather 查天气；step1 wordgen 写报告，depends_on=[0]）→ 落库 plans/plan_steps → yield plan_created。</li>
+<li><strong>Executor</strong>：step0 ready → <code>SubAgentRunner(weather)</code> → <code>create_agent</code> + 中间件链 → get_user_location/get_city_code/get_weather（工具内 <code>user_lat_var.get()</code> 读 GPS）→ 结果落盘 <code>plan_results/step_0.md</code> → Reflector accept。</li>
+<li>step1 依赖满足 → wordgen 执行（任务描述里注入了 step_0.md 路径+摘要）→ <code>run_word_code</code> 子进程 cwd=<code>tasks/&lt;plan_id&gt;/</code> → 读前序结果 → WordDoc 排版 → doc.save → <code>create_artifact</code> 注册产物。</li>
+<li><strong>Finalizer</strong> 汇总两步结果流式输出 → yield plan_completed。</li>
+<li><strong>agent.py finally</strong>：save_message 落库两条 + 回写 Redis 缓存 + 发 message_ids → 埋点 log_api_call + publish chat.completed。</li>
+<li><strong>admin_service</strong>：订阅到事件 → INSERT lc_admin.api_call_logs（看板 DAU/趋势数据源）。</li>
+<li><strong>前端</strong>：step 状态机驱动 PlanPanel 实时渲染 → 全量 output 覆盖 assistantMsg → onDone 持久化会话。</li>
+</ol>
+<hr />
+<h1 id="_9">附录 · 复习自测清单</h1>
+<p>能回答这些问题，说明项目已经捡回来了：</p>
+<ul>
+<li>[ ] Planner 为什么不用 <code>with_structured_output</code>？（DeepSeek thinking 不支持 tool_choice，纯文本 JSON + _extract_json 容错）</li>
+<li>[ ] 并行执行时 ContextVar 为什么要 <code>parent_ctx.copy()</code>？（Context 非线程安全，共享报 already entered）</li>
+<li>[ ] 同步 Orchestrator 怎么接进 async FastAPI？（Queue + call_soon_threadsafe + ctx.run + 哨兵）</li>
+<li>[ ] db_patch 的原理？（原地改 mysql_conf 字典，import 前完成）</li>
+<li>[ ] 多知识库在 Chroma 里怎么隔离？（单集合 kb_store + chunk 元数据 kb_id/doc_id + where 过滤）</li>
+<li>[ ] 切换嵌入模型会发生什么？（维度签名不匹配 → 自动清库 → 后台全量重建）</li>
+<li>[ ] JWT 为什么能各服务独立验签？internal 接口安全靠什么？（共享密钥不查库；内网拓扑 + nginx 不转发）</li>
+<li>[ ] 限流 Redis 挂了会怎样？（fail-open 放行）</li>
+<li>[ ] 前端流式中切换路由为什么内容不丢？（useChat 模块级单例 + pendingStreams 按会话隔离）</li>
+<li>[ ] 重新生成消息时前后端历史怎么保持一致？（本地 splice + truncate_to 后端回滚 + 向前定位最近 user 消息）</li>
+</ul>
+<hr />
+<p><em>手册生成时间：2026-08-05 · 基于当前代码库实读，行号与实现以代码为准。</em></p></main>
+</div>
+<button class="back-top" id="backTop" aria-label="回到顶部">↑</button>
+<script>
+(function(){
+  var panel=document.getElementById('tocPanel'), btn=document.getElementById('tocToggle');
+  btn.addEventListener('click',function(){ panel.classList.toggle('open'); });
+  panel.addEventListener('click',function(e){ if(e.target.tagName==='A'){ panel.classList.remove('open'); } });
+  var bt=document.getElementById('backTop');
+  window.addEventListener('scroll',function(){
+    bt.classList.toggle('show', window.scrollY>600);
+  },{passive:true});
+  bt.addEventListener('click',function(){ window.scrollTo({top:0,behavior:'smooth'}); });
+})();
+</script>
+</body>
+</html>

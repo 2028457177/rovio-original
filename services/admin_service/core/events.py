@@ -52,6 +52,7 @@ def subscribe_events(channel: str, handler: Callable[[dict], None], stop_event: 
         return
 
     def _run():
+        """后台线程主循环：监听频道消息并调用 handler 处理，stop_event 置位后退出。"""
         try:
             client = get_redis_client()
             pubsub = client.pubsub()

@@ -51,6 +51,7 @@ def save_conversation_full(user_id: int, conversation_id: str, title: str, messa
 
 
 def get_conversations(user_id: int) -> list:
+    """查询指定用户的全部会话（含各会话消息），按置顶和更新时间降序返回。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -148,6 +149,7 @@ def reset_user_password(target_user_id: int, new_password: str) -> bool:
 
 
 def get_conversation(user_id: int, conversation_id: str) -> Optional[dict]:
+    """按用户ID和会话ID查询未删除的会话（含消息列表）。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -217,6 +219,7 @@ def save_message(user_id: int, conversation_id: str, role: str, content: str) ->
 
 
 def get_messages_by_conversation(user_id: int, conversation_id: str) -> list:
+    """查询指定会话的全部消息（按时间升序），会话不存在时返回空列表。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -233,10 +236,12 @@ def get_messages_by_conversation(user_id: int, conversation_id: str) -> list:
 
 
 def get_session_messages(user_id: int, session_id: str) -> list:
+    """获取指定会话的全部消息列表。"""
     return get_messages_by_conversation(user_id, session_id)
 
 
 def clear_session(user_id: int, session_id: str) -> None:
+    """删除指定会话的全部消息。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -515,6 +520,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 def verify_security_answer(answer: str, stored_hash: str) -> bool:
+    """校验密保答案是否与已存储的哈希匹配。"""
     return verify_password(answer.strip().lower(), stored_hash)
 
 
@@ -540,6 +546,7 @@ def create_user(username: str, password: str, display_name: str = "") -> Optiona
 
 
 def get_user_by_username(username: str) -> Optional[dict]:
+    """按用户名查询用户完整信息（含密码哈希），不存在返回 None。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -570,6 +577,7 @@ def get_user_by_username(username: str) -> Optional[dict]:
 
 
 def get_user_by_id(user_id: int) -> Optional[dict]:
+    """按用户ID查询用户信息，不存在返回 None。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -644,6 +652,7 @@ def update_user_profile(user_id: int, display_name: Optional[str] = None, email:
 
 
 def update_avatar_url(user_id: int, avatar_url: str) -> bool:
+    """更新用户头像 URL，返回是否更新成功。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -935,6 +944,7 @@ def revoke_all_other_devices(user_id: int, keep_token: str) -> int:
 
 
 def _parse_os(user_agent: str) -> str:
+    """从 User-Agent 字符串中解析出操作系统名称。"""
     ua = user_agent or ""
     if "Windows NT 10" in ua: return "Windows 10/11"
     if "Windows NT" in ua: return "Windows"
@@ -946,6 +956,7 @@ def _parse_os(user_agent: str) -> str:
 
 
 def _parse_browser(user_agent: str) -> str:
+    """从 User-Agent 字符串中识别浏览器类型（Edge/Chrome/Firefox 等）。"""
     ua = user_agent or ""
     if "Edg/" in ua: return "Edge"
     if "Chrome/" in ua and "Chromium" not in ua: return "Chrome"
@@ -985,6 +996,7 @@ def delete_user_self(user_id: int, password: str) -> bool:
 # ==================== 管理员相关 ====================
 
 def get_all_users() -> list:
+    """查询全部非管理员用户的列表（供管理后台展示）。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -1552,6 +1564,7 @@ def create_artifact(user_id: int, session_id: str, plan_id: str, art_type: str,
 
 def list_artifacts(user_id: int, session_id: str = None, art_type: str = None,
                    limit: int = 50) -> list:
+    """按会话 / 类型筛选查询用户的 Artifact 列表（按创建时间倒序）。"""
     with get_db() as conn:
         cursor = conn.cursor()
         sql = "SELECT id, session_id, plan_id, type, title, content_ref, mime_type, version, parent_id, meta, created_at FROM artifacts WHERE user_id = %s"
@@ -1584,6 +1597,7 @@ def list_artifacts(user_id: int, session_id: str = None, art_type: str = None,
 
 
 def get_artifact(user_id: int, artifact_id: str) -> Optional[dict]:
+    """按 ID 查询单个 Artifact 详情，不存在时返回 None。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(

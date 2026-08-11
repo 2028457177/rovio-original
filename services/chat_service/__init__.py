@@ -4,7 +4,6 @@
 - POST /api/chat 流式聊天（SSE，产出 plan_* / step_* / thinking / output 事件）
 - POST /api/plan DeepAgent plan 执行（流式 / 后台两种模式）
 - GET  /api/plans plan 列表 / 详情查询
-- GET  /api/subagents 可用 SubAgent 能力清单
 - 会话管理（列表 / 保存 / 删除 / 元数据 / 搜索 / 分叉）
 - 消息反馈（点赞 / 踩）
 - 异步任务状态查询

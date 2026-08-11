@@ -1890,7 +1890,7 @@ onMounted(() => loadKbs(false))
 .drawer-overlay {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.28);
-  z-index: 200;
+  z-index: 9050;
   display: flex;
   justify-content: flex-end;
 }
@@ -1936,7 +1936,7 @@ onMounted(() => loadKbs(false))
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(4px);
-  z-index: 300;
+  z-index: 9100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2012,7 +2012,7 @@ onMounted(() => loadKbs(false))
   border-radius: var(--radius-pill);
   border: 1px solid var(--border-light);
   font-size: 0.82rem;
-  z-index: 400;
+  z-index: 9200;
   box-shadow: 0 8px 30px var(--shadow-sm);
 }
 

@@ -10,11 +10,13 @@ RAG_CACHE_TTL = int(redis_conf.get("rag_cache", {}).get("ttl", 1800))
 
 
 def _cache_key(query: str) -> str:
+    """对查询内容计算MD5哈希并返回RAG缓存的Redis键名。"""
     query_hash = hashlib.md5(query.encode("utf-8")).hexdigest()
     return f"{RAG_CACHE_PREFIX}{query_hash}"
 
 
 def get_cached_rag_result(query: str) -> Optional[List[dict]]:
+    """按查询内容从 Redis 取 RAG 缓存结果，命中时刷新有效期。"""
     if not is_redis_available():
         return None
     try:
@@ -33,6 +35,7 @@ def get_cached_rag_result(query: str) -> Optional[List[dict]]:
 
 
 def cache_rag_result(query: str, results: List[dict]) -> bool:
+    """把 RAG 检索结果写入 Redis 缓存，成功返回 True。"""
     if not is_redis_available():
         return False
     try:
@@ -48,6 +51,7 @@ def cache_rag_result(query: str, results: List[dict]) -> bool:
 
 
 def invalidate_rag_cache() -> bool:
+    """清空Redis中所有RAG缓存条目，清除成功返回True。"""
     if not is_redis_available():
         return False
     try:

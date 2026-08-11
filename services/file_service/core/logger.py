@@ -17,11 +17,13 @@ _current_service = "service"
 
 
 def set_service_name(name: str):
+    """设置当前服务名（用于日志器命名与日志文件名）。"""
     global _current_service
     _current_service = name
 
 
 def _build_logger() -> logging.Logger:
+    """构建并返回 Logger：输出到按天滚动的日志文件与控制台。"""
     log = logging.getLogger(f"lc_course.{_current_service}")
     if log.handlers:
         return log

@@ -222,7 +222,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getToken, getUser, logout } from '@/api/auth.js'
+import { getUser, logout } from '@/api/auth.js'
 import LineChart from '@/components/LineChart.vue'
 import StackedAreaChart from '@/components/StackedAreaChart.vue'
 
@@ -285,10 +285,8 @@ const metricCards = computed(() => {
 })
 
 async function apiFetch(url) {
-  const token = getToken()
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  // JWT 存于 HttpOnly Cookie，同源请求自动携带
+  const res = await fetch(url)
   if (res.status === 401) {
     logout()
     router.push('/login')

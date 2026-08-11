@@ -14,6 +14,7 @@ search_tool = TavilySearchResults(
 
 @tool(description="根据用户需求联网搜索相应内容")
 def search(content:str):
+    """根据用户需求联网搜索，返回搜索结果列表。"""
     result = search_tool.invoke(content)
     return result
 

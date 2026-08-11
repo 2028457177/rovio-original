@@ -68,6 +68,7 @@ def load_tool_details(tool_names: list[str]) -> str:
 
 
 def load_all_tool_details() -> str:
+    """加载工具提示词文件中全部工具的详细描述并拼接后返回。"""
     raw_text = _load_tools_prompt_raw()
     sections = {}
     pattern = r'### (\w+)\n(.*?)(?=\n### \w+\n|\Z)'

@@ -14,6 +14,7 @@ _cfg = None
 
 
 def _get_config() -> dict:
+    """获取并缓存本服务 MySQL 连接配置（含 DictCursor 与自动提交）。"""
     global _cfg
     if _cfg is None:
         _cfg = get_mysql_config()

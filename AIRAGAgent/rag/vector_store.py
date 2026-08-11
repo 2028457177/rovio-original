@@ -46,6 +46,7 @@ class VectorStoreService:
         :return: None
         """
         def check_md5_hex(md5_for_check:str):
+            """检查 MD5 是否已记录在去重文件中（已记录返回 True），文件缺失时自动创建并返回 False。"""
             if not os.path.exists(get_abs_path(chroma_conf["md5_hex_store"])):
                 open(get_abs_path(chroma_conf["md5_hex_store"]), "w", encoding="utf-8").close()
                 return  False
@@ -60,18 +61,14 @@ class VectorStoreService:
                 return  False
 
         # 保存md5
-        """
-        保存md5到文件
-        """
         def save_md5_hex(md5_for_check:str):
+            """把md5值追加写入配置指定的md5存储文件。"""
             with open(get_abs_path(chroma_conf["md5_hex_store"]), "a", encoding="utf-8") as f:
                 f.write(md5_for_check + "\n")
 
 
-        """
-        从文件路径获取文档
-        """
         def get_file_doucuments(read_path:str):
+            """按文件后缀（txt/pdf/xlsx）加载对应格式的文档列表。"""
             if read_path.endswith(".txt"):
                 return txt_loader(read_path)
             if read_path.endswith(".pdf"):

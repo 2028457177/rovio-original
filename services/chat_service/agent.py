@@ -30,6 +30,7 @@ from AIRAGAgent.agent.tools.agent_tools import user_ip_var
 
 
 def _estimate_tokens(text: str) -> int:
+    """粗略估算文本的 token 数（中文按 1 字 1 token，其他字符按 4 个算 1 token）。"""
     if not text:
         return 0
     chinese_count = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
@@ -46,6 +47,7 @@ class AgentService:
 
     @staticmethod
     def _get_session_messages_with_cache(user_id: int, session_id: str) -> list:
+        """带缓存读取会话消息：先查缓存，未命中再查库并回填缓存。"""
         if not session_id:
             return None
         cached = get_cached_session(user_id, session_id)
@@ -59,6 +61,7 @@ class AgentService:
     @staticmethod
     def _save_session_messages_with_cache(user_id: int, session_id: str,
                                           user_message: str, assistant_message: str):
+        """把用户与助手消息写入数据库并刷新该会话的 Redis 缓存，返回两条消息ID。"""
         user_msg_id = save_message(user_id, session_id, "user", user_message)
         assistant_msg_id = save_message(user_id, session_id, "assistant", assistant_message)
         full_messages = get_session_messages(user_id, session_id)
@@ -76,6 +79,7 @@ class AgentService:
         _collected_output: list = []
 
         def sync_producer():
+            """在后台线程中执行 Agent 流式输出，把事件块塞进队列供异步消费者转发。"""
             try:
                 logger.debug(f"[chat] 开始流式输出: {message[:30]}...")
                 if truncate_to is not None and session_id:
@@ -173,8 +177,22 @@ class AgentService:
             except Exception as log_e:
                 logger.debug(f"[chat] 埋点/事件发布失败: {log_e}")
 
+            # 自动记忆抽取：流式完成后异步触发（fire-and-forget，不阻塞响应）
+            # Qdrant/嵌入不可用时静默放弃，不影响主流程
+            try:
+                if not _has_error and message:
+                    full_resp_for_mem = "".join(_collected_output)
+                    if full_resp_for_mem:
+                        from AIRAGAgent.agent.memory.extractor import extract_memories_async
+                        loop.run_in_executor(None, lambda: ctx.run(
+                            extract_memories_async, user_id, message, full_resp_for_mem
+                        ))
+            except Exception as mem_e:
+                logger.debug(f"[chat] 记忆抽取投递失败: {mem_e}")
+
     def enqueue_plan_background(self, user_id: int, message: str,
-                                session_id: str = None) -> str | None:
+                                session_id: str = None,
+                                search_enabled: bool = True) -> str | None:
         """把 plan 投递到 task_queue 后台执行（不阻塞，返回 task_id 供轮询）。
 
         适用于长耗时任务（生成大报告、批量操作），用户通过 /api/tasks/{task_id} 查询进度。
@@ -185,10 +203,12 @@ class AgentService:
             "chat_history": chat_history or [],
             "user_id": user_id,
             "session_id": session_id or "",
+            "search_enabled": search_enabled,
         }
         return enqueue_task(TaskType.PLAN_EXECUTE, params, priority=1)
 
     async def clear_session(self, user_id: int, session_id: str) -> None:
+        """清除指定会话的消息记录并使其缓存失效，失败时抛出异常。"""
         try:
             clear_session(user_id, session_id)
             invalidate_session(user_id, session_id)

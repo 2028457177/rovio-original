@@ -1,18 +1,5 @@
 const API_BASE = '/api'
-const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setToken(token) {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function removeToken() {
-  localStorage.removeItem(TOKEN_KEY)
-}
 
 export function getUser() {
   const raw = localStorage.getItem(USER_KEY)
@@ -37,24 +24,28 @@ export function isAdmin() {
   return user && user.role === 'admin'
 }
 
-export function logout() {
-  removeToken()
+export async function logout() {
+  // JWT 已迁入 HttpOnly Cookie：通知后端清除（keepalive 保证页面跳转前送达），再清本地用户缓存
+  try {
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      keepalive: true,
+    })
+  } catch { /* 网络异常时忽略，本地缓存仍会清除 */ }
   removeUser()
 }
 
 function authHeaders(extra = {}) {
-  const token = getToken()
-  const headers = { ...extra }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
+  // JWT 存于 HttpOnly Cookie（同源请求自动携带，JS 不可读），无需手动附加头
+  return { ...extra }
 }
 
 export async function login(username, password) {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ username, password }),
   })
 
@@ -64,7 +55,6 @@ export async function login(username, password) {
     throw new Error(data.error || '登录失败')
   }
 
-  setToken(data.token)
   setUser(data.user)
   return data
 }
@@ -73,6 +63,7 @@ export async function register(username, password, displayName = '') {
   const response = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ username, password, display_name: displayName }),
   })
 
@@ -82,18 +73,12 @@ export async function register(username, password, displayName = '') {
     throw new Error(data.error || '注册失败')
   }
 
-  setToken(data.token)
   setUser(data.user)
   return data
 }
 
 export async function fetchMe() {
-  const token = getToken()
-  if (!token) return null
-
-  const response = await fetch(`${API_BASE}/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const response = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' })
 
   if (!response.ok) {
     if (response.status === 401) {

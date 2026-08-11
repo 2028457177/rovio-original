@@ -37,12 +37,19 @@ def load_redis_config(config_path: str = get_abs_path("config/redis.yml"), encod
         return yaml.load(f, Loader=yaml.FullLoader)
 
 
+# 加载长期记忆配置文件
+def load_memory_config(config_path: str = get_abs_path("config/memory.yml"), encoding: str = "utf-8"):
+    with open(config_path, "r", encoding=encoding) as f:
+        return yaml.load(f, Loader=yaml.FullLoader)
+
+
 rag_conf = load_rag_config()
 chroma_conf = load_chroma_config()
 prompts_conf = load_prompts_config()
 agent_conf = load_agent_config()
 mysql_conf = load_mysql_config()
 redis_conf = load_redis_config()
+memory_conf = load_memory_config()
 
 # 敏感凭证优先从环境变量读取（由 .env 注入进程环境），YAML 中仅保留空占位。
 # 这样密钥不再进入 git 跟踪的配置文件，避免历史泄露。

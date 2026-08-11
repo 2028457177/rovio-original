@@ -24,6 +24,7 @@ class TaskStatus(str, Enum):
     RETRYING = "retrying"
 
     def __str__(self):
+        """返回任务状态的字符串值。"""
         return self.value
 
 
@@ -34,6 +35,7 @@ class TaskType(str, Enum):
 
 
 def enqueue_task(task_type: TaskType, params: dict, priority: int = 0) -> Optional[str]:
+    """把任务写入 Redis 队列，返回任务ID；Redis 不可用返回 None。"""
     if not is_redis_available():
         logger.warning("Redis 不可用，无法入队任务")
         return None
@@ -69,6 +71,7 @@ def enqueue_task(task_type: TaskType, params: dict, priority: int = 0) -> Option
 
 
 def get_task_status(task_id: str) -> Optional[dict]:
+    """根据任务ID查询任务执行状态与结果，未找到返回None。"""
     if not is_redis_available():
         return None
     try:
@@ -88,13 +91,16 @@ def get_task_status(task_id: str) -> Optional[dict]:
 
 class TaskWorker:
     def __init__(self):
+        """初始化任务工作器，维护任务类型到处理函数的映射表。"""
         self._handlers: dict[str, Callable] = {}
 
     def register_handler(self, task_type: TaskType, handler: Callable):
+        """注册任务类型对应的处理函数。"""
         self._handlers[task_type.value if not isinstance(task_type, str) else task_type] = handler
         logger.info(f"任务处理器已注册: {task_type}")
 
     def _process_task(self, task_data: dict) -> dict:
+        """调用对应处理器执行任务，失败时记录重试或标记最终失败，返回更新后的任务数据。"""
         task_id = task_data["task_id"]
         task_type = task_data["task_type"]
         handler = self._handlers.get(task_type)
@@ -125,6 +131,7 @@ class TaskWorker:
         return task_data
 
     def process_one(self, timeout: int = 0) -> Optional[dict]:
+        """从队列取一个任务执行（优先重试、优先级队列，最后普通队列）。"""
         if not is_redis_available():
             return None
 
@@ -165,6 +172,7 @@ class TaskWorker:
         return None
 
     def _save_result(self, client, task_data: dict):
+        """将任务结果写入Redis并设置有效期，同时从任务表中移除该任务。"""
         task_id = task_data["task_id"]
         client.setex(
             f"{RESULT_KEY_PREFIX}{task_id}",
@@ -174,6 +182,7 @@ class TaskWorker:
         client.hdel(f"{QUEUE_NAME}:tasks", task_id)
 
     def run(self, poll_interval: float = 1.0):
+        """启动 Worker 主循环：持续取任务执行，空闲时休眠轮询。"""
         import signal
         import sys
 
@@ -203,10 +212,12 @@ _worker = TaskWorker()
 
 
 def get_task_worker() -> TaskWorker:
+    """返回全局唯一的任务工作器实例。"""
     return _worker
 
 
 def fill_word_handler(params: dict) -> str:
+    """按模板路径执行 Word 文档自动填充任务。"""
     from AIRAGAgent.agent.tools.file_tools import auto_fill_word
     template_path = params.get("template_path", "")
     return auto_fill_word.invoke({"template_path": template_path})
@@ -220,14 +231,18 @@ def plan_execute_handler(params: dict) -> dict:
         chat_history: 会话历史 list[dict]
         user_id: int
         session_id: str
+        search_enabled: bool（联网搜索开关，关闭后不选 search 子代理）
     返回：
         {"plan_id": str, "final_answer": str, "success": bool}
     """
     from AIRAGAgent.agent.orchestrator import get_orchestrator
+    from AIRAGAgent.agent.tools.agent_tools import search_enabled_var
     query = params.get("query", "")
     chat_history = params.get("chat_history") or []
     user_id = int(params.get("user_id", 0))
     session_id = params.get("session_id", "")
+    search_enabled = bool(params.get("search_enabled", True))
+    search_enabled_var.set(search_enabled)
 
     orch = get_orchestrator()
     final_text = orch.execute(query, chat_history, user_id=user_id, session_id=session_id)
@@ -244,5 +259,6 @@ def plan_execute_handler(params: dict) -> dict:
 
 
 def register_default_handlers():
+    """向全局工作器注册默认的任务处理器。"""
     _worker.register_handler(TaskType.FILL_WORD, fill_word_handler)
     _worker.register_handler(TaskType.PLAN_EXECUTE, plan_execute_handler)

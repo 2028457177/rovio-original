@@ -37,6 +37,7 @@ def apply_db_redirect():
     from core.events import publish_event, CHANNEL_RATE_LIMITED
 
     def _log_rate_limit_event_via_redis(user_id, ip, limit_type, identifier):
+        """以发布 Redis 事件的方式上报限流记录（替代原直写数据库）。"""
         try:
             publish_event(CHANNEL_RATE_LIMITED, {
                 "user_id": user_id,
@@ -54,6 +55,7 @@ def apply_db_redirect():
     _orig_log_tool_call = _db.log_tool_call
 
     def _log_tool_call_with_event(user_id, session_id, tool_name, duration_ms, is_success, error_msg):
+        """写工具调用日志到 lc_chat 库，并同时发布 Redis 事件供 admin 聚合。"""
         try:
             _orig_log_tool_call(user_id, session_id, tool_name, duration_ms, is_success, error_msg)
         except Exception as e:

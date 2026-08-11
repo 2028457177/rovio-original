@@ -6,6 +6,7 @@ from AIRAGAgent.utils.config_handler import mysql_conf
 
 
 def _get_db_config():
+    """从配置读取 MySQL 连接参数，组装成 pymysql 连接配置字典。"""
     return {
         "host": mysql_conf.get("host", "localhost"),
         "port": int(mysql_conf.get("port", 3306)),
@@ -19,11 +20,13 @@ def _get_db_config():
 
 
 def get_connection():
+    """创建一个新的 MySQL 数据库连接。"""
     return pymysql.connect(**_get_db_config())
 
 
 @contextmanager
 def get_db():
+    """上下文管理器：获取一个数据库连接，退出时自动关闭。"""
     conn = get_connection()
     try:
         yield conn
@@ -32,6 +35,7 @@ def get_db():
 
 
 def init_db():
+    """初始化数据库：创建缺失的表，并给历史表补充缺失的列和索引。"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -365,4 +369,5 @@ def _seed_admin_user(cursor, conn):
 
 
 def close_pool():
+    """关闭数据库连接池（当前为空实现，预留接口）。"""
     pass

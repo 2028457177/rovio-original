@@ -16,6 +16,7 @@ _pool = None
 
 
 def _get_pool():
+    """获取 Redis 连接池（首次调用时惰性创建并缓存）。"""
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
@@ -32,10 +33,12 @@ def _get_pool():
 
 
 def get_redis_client() -> redis.Redis:
+    """返回基于连接池的 Redis 客户端。"""
     return redis.Redis(connection_pool=_get_pool())
 
 
 def is_redis_available() -> bool:
+    """检测 Redis 是否可用（ping 成功返回 True）。"""
     try:
         get_redis_client().ping()
         return True
@@ -45,6 +48,7 @@ def is_redis_available() -> bool:
 
 
 def close_redis():
+    """关闭并清空 Redis 连接池（应用退出时调用）。"""
     global _pool
     if _pool is not None:
         _pool.disconnect()

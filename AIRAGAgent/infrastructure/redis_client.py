@@ -7,6 +7,7 @@ _pool = None
 
 
 def _get_pool():
+    """按配置创建并返回全局Redis连接池（懒加载单例）。"""
     global _pool
     if _pool is None:
         _pool = ConnectionPool(
@@ -23,10 +24,12 @@ def _get_pool():
 
 
 def get_redis_client():
+    """基于全局连接池创建一个Redis客户端并返回。"""
     return redis.Redis(connection_pool=_get_pool())
 
 
 def is_redis_available():
+    """探测 Redis 是否可用（ping 通即返回 True，否则记录警告并返回 False）。"""
     try:
         client = get_redis_client()
         client.ping()
@@ -37,6 +40,7 @@ def is_redis_available():
 
 
 def close_redis():
+    """关闭并释放全局Redis连接池。"""
     global _pool
     if _pool is not None:
         _pool.disconnect()

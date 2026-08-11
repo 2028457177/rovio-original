@@ -38,6 +38,7 @@ def _current_user_id() -> int | None:
 # 总结服务类
 class RagSummarizeService(object):
     def __init__(self):
+        """初始化总结服务：加载提示词模板、默认聊天模型并构建处理链。"""
         self.prompt_text = load_rag_prompts()    # 加载提示词
         self.prompt_template = PromptTemplate.from_template(self.prompt_text)    # 提示词模板
         self.model = chat_model    # 聊天模型

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { getToken, getUser, logout } from '@/api/auth.js'
+import { getUser, logout } from '@/api/auth.js'
 
 const routes = [
   {
@@ -45,42 +45,30 @@ const router = createRouter({
   routes,
 })
 
-// 避免并发多次验证 token
-let tokenVerified = false
+// 并发去重：同一时刻只发起一次 /api/auth/me 探测登录态
+// JWT 存于 HttpOnly Cookie，前端无法读 token，只能通过 me 接口判断是否已登录
+let verifyPromise = null
 
-async function verifyToken() {
-  if (tokenVerified) return true
-
-  const token = getToken()
-  if (!token) return false
-
-  try {
-    const response = await fetch('/api/auth/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!response.ok) {
-      if (response.status === 401) {
-        logout()
-      }
-      return false
-    }
-    tokenVerified = true
-    return true
-  } catch {
-    return true // 网络异常时放行，避免离线时被卡住
+function verifyToken() {
+  if (!verifyPromise) {
+    verifyPromise = fetch('/api/auth/me', { credentials: 'include' })
+      .then((response) => {
+        if (!response.ok) {
+          if (response.status === 401) logout()
+          return false
+        }
+        return true
+      })
+      .catch(() => true) // 网络异常放行，避免离线时被卡在登录页
+      .finally(() => { verifyPromise = null })
   }
+  return verifyPromise
 }
 
 router.beforeEach(async (to, from, next) => {
-  const token = getToken()
   const user = getUser()
 
   if (to.meta.requiresAuth) {
-    if (!token) {
-      next({ name: 'Login', query: { redirect: to.fullPath } })
-      return
-    }
-    // 验证 token 是否过期，过期则清除并跳转登录
     const valid = await verifyToken()
     if (!valid) {
       next({ name: 'Login', query: { redirect: to.fullPath } })
@@ -88,13 +76,16 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  if (to.meta.guest && token) {
-    if (user && user.role === 'admin') {
-      next({ name: 'Admin' })
-    } else {
-      next({ name: 'Chat' })
+  if (to.meta.guest) {
+    const logged = await verifyToken()
+    if (logged) {
+      if (user && user.role === 'admin') {
+        next({ name: 'Admin' })
+      } else {
+        next({ name: 'Chat' })
+      }
+      return
     }
-    return
   }
 
   if (to.meta.role && user) {

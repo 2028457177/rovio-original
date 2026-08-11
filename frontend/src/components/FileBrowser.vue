@@ -84,6 +84,19 @@
               <line x1="12" y1="15" x2="12" y2="3"></line>
             </svg>
           </button>
+          <button
+            v-if="!entry.is_dir && windowDesktop"
+            class="fb-action"
+            @click.stop="onSaveLocal(entry)"
+            title="保存到本地"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <line x1="22" y1="12" x2="2" y2="12"></line>
+              <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+              <line x1="6" y1="16" x2="6.01" y2="16"></line>
+              <line x1="10" y1="16" x2="10.01" y2="16"></line>
+            </svg>
+          </button>
         </li>
       </ul>
     </div>
@@ -96,6 +109,7 @@
           <img :src="previewImage.url" :alt="previewImage.name" class="fb-preview-img" />
           <div class="fb-preview-info">
             <span>{{ previewImage.name }}</span>
+            <button v-if="windowDesktop" class="fb-preview-dl" @click="onSaveLocal(previewImage.entry)">保存到本地</button>
             <button class="fb-preview-dl" @click="onDownload(previewImage.entry)">下载</button>
           </div>
         </div>
@@ -110,6 +124,7 @@
             <div class="fb-preview-text-header">
               <span>{{ textContentName }}</span>
               <div>
+                <button v-if="windowDesktop" class="fb-preview-dl" @click="onSaveLocal(textContentEntry)">保存到本地</button>
                 <button class="fb-preview-dl" @click="onDownload(textContentEntry)">下载</button>
                 <button class="fb-preview-close" @click="textContent = null">✕</button>
               </div>
@@ -212,6 +227,25 @@ async function previewTextFile(entry) {
 
 function onDownload(entry) {
   downloadWorkspaceFile(entry.path)
+}
+
+// 桌面 App 独有能力：把服务器工作区文件一键保存到本地磁盘
+const windowDesktop = !!window.desktop?.isDesktop
+
+async function onSaveLocal(entry) {
+  if (!window.desktop?.saveFile) return
+  try {
+    // 走下载接口拿原始字节，支持任意文件类型（含 docx 等）
+    const res = await fetch(`/api/file/download?path=${encodeURIComponent(entry.path)}`)
+    if (!res.ok) throw new Error(`获取文件失败 (${res.status})`)
+    const data = await res.arrayBuffer()
+    const result = await window.desktop.saveFile({ defaultName: entry.name, data })
+    if (result?.saved) {
+      alert(`已保存到：${result.path}`)
+    }
+  } catch (e) {
+    alert(`保存失败：${e.message || e}`)
+  }
 }
 
 // 工具函数

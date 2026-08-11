@@ -189,40 +189,79 @@
         ref="chatContainer"
         @scroll="onChatScroll"
       >
-        <div v-if="showWelcome" class="welcome-center">
-          <div class="welcome-hero">
-            <p class="welcome-eyebrow">✦ 随时为你效劳</p>
-            <h1 class="welcome-hero-title serif">
-              <span class="hero-line" style="--d: 0.15s">今天想</span>
-              <span class="hero-line hero-line-accent" style="--d: 0.3s">完成什么？</span>
-            </h1>
-            <p class="welcome-hero-subtitle" style="--d: 0.45s">上传 Word 模板，AI 自动填充并生成文档——一句话就好</p>
+        <div v-if="showWelcome" class="welcome-stage">
+          <div class="welcome-backdrop" aria-hidden="true">
+            <div class="backdrop-grid"></div>
           </div>
-          <ChatInput
-            :disabled="isStreaming"
-            :is-streaming="isStreaming"
-            center-mode
-            @send="onSendMessage"
-            @stop="onStopStreaming"
-          />
+
+          <div class="welcome-spread">
+            <header class="welcome-masthead" style="--d: 0.05s">
+              <span class="mast-eyebrow mast-no serif">№ {{ dayIndex }}</span>
+              <span class="mast-rule"></span>
+              <span class="mast-eyebrow">{{ mastheadLabel }}</span>
+            </header>
+
+            <section class="welcome-hero">
+              <p class="hero-kicker serif" style="--d: 0.15s">{{ greeting }}，</p>
+              <h1 class="hero-title serif">
+                <span class="hero-line" style="--d: 0.3s">{{ username || '朋友' }}</span>
+              </h1>
+            </section>
+
+            <div class="welcome-timestamp" style="--d: 0.65s">
+              <span class="ts-date">{{ clockDate }}</span>
+              <span class="ts-clock serif">{{ clockTime }}</span>
+            </div>
+
+            <ChatInput
+              :disabled="false"
+              :is-streaming="isStreaming"
+              center-mode
+              :search-enabled="searchEnabled"
+              @toggle-search="toggleSearch"
+              @send="onSendMessage"
+              @stop="onStopStreaming"
+            />
+
+            <nav class="welcome-cues" style="--d: 0.85s" aria-label="快速开始">
+              <button
+                v-for="(cue, i) in cues"
+                :key="i"
+                class="cue"
+                :style="{ '--cue-i': i }"
+                @click="onSendMessage(cue.prompt)"
+              >
+                <span class="cue-index serif">{{ String(i + 1).padStart(2, '0') }}</span>
+                <span class="cue-body">
+                  <span class="cue-title">{{ cue.title }}</span>
+                  <span class="cue-desc">{{ cue.desc }}</span>
+                </span>
+                <svg class="cue-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </button>
+            </nav>
+          </div>
         </div>
 
-        <TransitionGroup name="message-list" tag="div" class="messages-list" :key="sessionId">
-          <MessageBubble
-            v-for="(msg, index) in messages"
-            :key="msg.id"
-            :message="msg"
-            :index="index"
-            :streaming="!!msg.streaming"
-            :thinking-content="msg.streaming ? thinkingContent : ''"
-            @copy="onMessageCopy"
-            @regenerate="onMessageRegenerate"
-            @edit="onMessageEdit"
-            @stop="onMessageStop"
-            @feedback="onMessageFeedback"
-            @branch="onMessageBranch"
-          />
-        </TransitionGroup>
+        <div v-show="!keepWelcome" class="messages-list" :key="sessionId">
+          <TransitionGroup name="message-list" tag="div">
+            <MessageBubble
+              v-for="(msg, index) in messages"
+              :key="msg.id"
+              :message="msg"
+              :index="index"
+              :streaming="!!msg.streaming"
+              :thinking-content="msg.streaming ? thinkingContent : ''"
+              @copy="onMessageCopy"
+              @regenerate="onMessageRegenerate"
+              @edit="onMessageEdit"
+              @stop="onMessageStop"
+              @feedback="onMessageFeedback"
+              @branch="onMessageBranch"
+            />
+          </TransitionGroup>
+        </div>
       </div>
 
       <!-- 滚动到底部按钮 + 新消息提示 -->
@@ -245,10 +284,21 @@
         v-if="!showWelcome"
         :disabled="isStreaming"
         :is-streaming="isStreaming"
+        :search-enabled="searchEnabled"
+        @toggle-search="toggleSearch"
         @send="onSendMessage"
         @stop="onStopStreaming"
       />
     </main>
+
+    <!-- 右上角任务清单：仅欢迎页可见，执行中保持可见以显示进度 -->
+    <TaskQueue
+      :visible="showWelcome"
+      :on-execute-task="executeTaskInQueue"
+      @start="onTaskQueueStart"
+      @end="onTaskQueueEnd"
+      @stop="onStopStreaming"
+    />
 
     <!-- 左下角折叠式用户面板 -->
     <div class="user-panel" ref="userPanelRef">
@@ -303,29 +353,6 @@
               </svg>
             </span>
             <span class="user-dropdown-label">计划历史</span>
-            <span class="user-dropdown-arrow">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <polyline points="9 18 15 12 9 6"></polyline>
-              </svg>
-            </span>
-          </button>
-
-          <button class="user-dropdown-item" @click="onOpenAgents">
-            <span class="user-dropdown-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="4" y="4" width="16" height="16" rx="3"></rect>
-                <rect x="9" y="9" width="6" height="6"></rect>
-                <line x1="9" y1="1" x2="9" y2="4"></line>
-                <line x1="15" y1="1" x2="15" y2="4"></line>
-                <line x1="9" y1="20" x2="9" y2="23"></line>
-                <line x1="15" y1="20" x2="15" y2="23"></line>
-                <line x1="20" y1="9" x2="23" y2="9"></line>
-                <line x1="20" y1="14" x2="23" y2="14"></line>
-                <line x1="1" y1="9" x2="4" y2="9"></line>
-                <line x1="1" y1="14" x2="4" y2="14"></line>
-              </svg>
-            </span>
-            <span class="user-dropdown-label">Agent 能力</span>
             <span class="user-dropdown-arrow">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <polyline points="9 18 15 12 9 6"></polyline>
@@ -471,16 +498,6 @@
       <PlanHistory />
     </SideDrawer>
 
-    <!-- Agent 能力 抽屉 -->
-    <SideDrawer
-      v-model="agentDrawerOpen"
-      title="Agent 能力"
-      subtitle="系统可调用的专业子智能体清单"
-      width="880px"
-    >
-      <AgentCapabilities />
-    </SideDrawer>
-
     <!-- 账号设置 抽屉 -->
     <SideDrawer
       v-model="settingsDrawerOpen"
@@ -507,7 +524,7 @@ import KbManager from '@/components/kb/KbManager.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import FileBrowser from '@/components/FileBrowser.vue'
 import PlanHistory from '@/components/PlanHistory.vue'
-import AgentCapabilities from '@/components/AgentCapabilities.vue'
+import TaskQueue from '@/components/TaskQueue.vue'
 
 const router = useRouter()
 const { theme, toggle: toggleTheme } = useTheme()
@@ -521,6 +538,7 @@ const {
   streamingContent,
   thinkingContent,
   showWelcome,
+  keepWelcome,
   conversations,
   visibleConversations,
   currentConversationId,
@@ -528,6 +546,7 @@ const {
   searchKeyword,
   searchResults,
   isSearching,
+  pendingStreams,
   sendMessage,
   stopStreaming,
   regenerateMessage,
@@ -544,7 +563,9 @@ const {
   searchConversations,
   clearSearch,
   exportConversation,
-  dismissError
+  dismissError,
+  searchEnabled,
+  toggleSearch
 } = useChat()
 
 const chatContainer = ref(null)
@@ -557,7 +578,6 @@ const kbDrawerOpen = ref(false)
 const settingsDrawerOpen = ref(false)
 const workspaceDrawerOpen = ref(false)
 const planDrawerOpen = ref(false)
-const agentDrawerOpen = ref(false)
 const fileBrowserRef = ref(null)
 
 // 滚动 / 新消息提示
@@ -618,11 +638,6 @@ function onOpenPlans() {
   planDrawerOpen.value = true
 }
 
-function onOpenAgents() {
-  userPanelOpen.value = false
-  agentDrawerOpen.value = true
-}
-
 function onSettingsAccountDeleted() {
   settingsDrawerOpen.value = false
   resetChatState()
@@ -633,6 +648,54 @@ function onSettingsAccountDeleted() {
 // 用户信息
 const user = getUser()
 const username = computed(() => user ? (user.display_name || user.username) : '')
+
+// 实时时钟与个性化问候
+const now = ref(new Date())
+let clockTimer = null
+const clockTime = computed(() => {
+  const d = now.value
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+})
+const clockDate = computed(() => {
+  const d = now.value
+  const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
+  return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月 ${d.getDate()} 日 · ${weekdays[d.getDay()]}`
+})
+const greeting = computed(() => {
+  const h = now.value.getHours()
+  if (h < 5) return '夜深了'
+  if (h < 9) return '早上好'
+  if (h < 12) return '上午好'
+  if (h < 14) return '中午好'
+  if (h < 18) return '下午好'
+  if (h < 23) return '晚上好'
+  return '夜深了'
+})
+
+// 编辑式页眉：当年第几天 + 时段札记名
+const dayIndex = computed(() => {
+  const d = now.value
+  const start = new Date(d.getFullYear(), 0, 0)
+  const diff = d - start
+  return String(Math.floor(diff / 86400000)).padStart(3, '0')
+})
+const mastheadLabel = computed(() => {
+  const h = now.value.getHours()
+  if (h < 5) return '夜阑札记'
+  if (h < 9) return '晨间札记'
+  if (h < 12) return '午前手记'
+  if (h < 14) return '午间手记'
+  if (h < 18) return '午后手记'
+  return '晚间札记'
+})
+
+// 快速开始：点击即发送对应提示词
+const cues = [
+  { title: '生成文档', desc: '上传 Word 模板，AI 填充字段并成稿', prompt: '我上传了一份会议纪要模板，请帮我填充示例内容并生成文档' },
+  { title: '知识库检索', desc: '从你的知识库里找答案，引用可溯源', prompt: '在知识库里搜一下项目管理流程，并给出要点' },
+  { title: '调研与写作', desc: '联网调研 + 代码执行，产出结构化报告', prompt: '帮我调研主流 AI 编程助手的对比并生成一份报告' },
+]
 
 // 侧边栏状态
 const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < 768)
@@ -777,6 +840,15 @@ function onMessageBranch(message) {
 
 function onStopStreaming() {
   stopStreaming()
+  // 并行任务可能跑在独立会话（tq_ 开头）或任务队列专属会话，
+  // 需全部中止，否则其 onExecuteTask Promise 永不 resolve，任务卡在 running
+  for (const sid of [...pendingStreams.value.keys()]) {
+    if (sid === taskQueueSessionId || (typeof sid === 'string' && sid.startsWith('tq_'))) {
+      const pending = pendingStreams.value.get(sid)
+      if (pending?.controller) { try { pending.controller.abort() } catch {} }
+      pendingStreams.value.delete(sid)
+    }
+  }
 }
 
 // 鼠标光晕
@@ -826,6 +898,7 @@ onMounted(() => {
   window.addEventListener('mousemove', updateMotion, { passive: true })
   document.addEventListener('click', closeUserPanel)
   loadConversations()
+  clockTimer = setInterval(() => { now.value = new Date() }, 1000)
 })
 
 onUnmounted(() => {
@@ -833,6 +906,7 @@ onUnmounted(() => {
   window.removeEventListener('mousemove', updateMotion)
   document.removeEventListener('click', closeUserPanel)
   if (motionRafId) cancelAnimationFrame(motionRafId)
+  if (clockTimer) clearInterval(clockTimer)
 })
 
 // 监听消息变化：自动滚到底（如果在底部）/ 累加新消息提示（如果不在底部）
@@ -880,8 +954,44 @@ onUnmounted(() => {
 })
 
 function onSendMessage(message, uploadedFilePath) {
+  // 当前会话忙（如任务队列在跑）→ 新建会话，保证用户能立即对话
+  if (isStreaming.value) {
+    newChat()
+  }
+  keepWelcome.value = false  // 用户手动发消息 → 切到对话页
   sendMessage(message, uploadedFilePath)
   nextTick(() => scrollToBottom())
+}
+
+// 任务清单执行回调：把 sendMessage 包装为 Promise
+// 任务队列始终用固定的 sessionId（onTaskQueueStart 时记住），不受用户切换会话影响
+let taskQueueSessionId = null
+function executeTaskInQueue(taskText) {
+  return new Promise((resolve, reject) => {
+    // 专属会话正忙（前一个任务还在流式）时，开新会话并行执行；
+    // 否则同会话请求会被 sendMessage 的 pendingStreams 去重静默丢弃，任务卡死
+    let sid = taskQueueSessionId
+    if (sid && pendingStreams.value.has(sid)) {
+      sid = 'tq_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+    }
+    sendMessage(taskText, '', {
+      sessionIdOverride: sid,
+      onDone: () => resolve(),
+      onError: (err) => reject(err),
+      onAbort: () => resolve()
+    })
+    nextTick(() => scrollToBottom())
+  })
+}
+
+// 任务队列整体开始/结束钩子
+function onTaskQueueStart() {
+  taskQueueSessionId = sessionId.value  // 记住任务队列专属会话
+  keepWelcome.value = true
+}
+function onTaskQueueEnd() {
+  taskQueueSessionId = null
+  // 不重置 keepWelcome —— 任务完成后保持欢迎页，用户手动发消息或切换会话时才离开
 }
 
 function onNewChat() {
@@ -1754,15 +1864,14 @@ function onRetryError() {
   margin: 0 auto;
 }
 
-/* ========== 欢迎区 ========== */
-.welcome-center {
+/* ========== 欢迎区 · 编辑式墨韵 ========== */
+.welcome-stage {
   flex: 1;
+  position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 26px;
-  padding: 20px;
+  padding: 36px 24px 56px;
   animation: welcome-fade 0.7s var(--ease-out-expo) both;
 }
 
@@ -1771,60 +1880,245 @@ function onRetryError() {
   to { opacity: 1; }
 }
 
-.welcome-hero {
+/* 背景：等距几何网格 —— 呼应文档/模板语义 */
+.welcome-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 35% 45%, #000 30%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 70% at 35% 45%, #000 30%, transparent 78%);
+  animation: grid-fade-in 1.4s var(--ease-out-expo) both;
+}
+
+@keyframes grid-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.backdrop-grid {
+  position: absolute;
+  inset: -2px;
+  background-image:
+    linear-gradient(to right, rgba(var(--accent-rgb), 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--accent-rgb), 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: -1px -1px;
+}
+
+[data-theme="dark"] .backdrop-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+.welcome-spread {
   position: relative;
-  text-align: center;
-}
-
-.welcome-eyebrow {
-  font-size: 12.5px;
-  letter-spacing: 4px;
-  color: var(--accent);
-  font-weight: 700;
-  margin-bottom: 18px;
-  animation: hero-line-in 0.8s var(--ease-out-expo) 0.05s both;
-}
-
-.welcome-hero-title {
-  font-size: clamp(38px, 5vw, 56px);
-  font-weight: 900;
-  line-height: 1.2;
-  margin: 0 0 18px;
-  letter-spacing: 1px;
+  z-index: 1;
+  width: 100%;
+  max-width: 880px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 30px;
+}
+
+/* 编辑式页眉：期号 + 细线 + 札记名 */
+.welcome-masthead {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  animation: hero-line-in 0.9s var(--ease-out-expo) var(--d, 0s) both;
+}
+
+.mast-no {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.5px;
+  font-feature-settings: "lnum";
+}
+
+.mast-rule {
+  flex: 0 1 72px;
+  height: 1px;
+  background: var(--border);
+  transform-origin: left;
+  animation: rule-grow 0.8s var(--ease-out-expo) 0.4s both;
+}
+
+@keyframes rule-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.mast-eyebrow {
+  font-size: 11.5px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 主标题区 */
+.welcome-hero {
+  position: relative;
+}
+
+.hero-kicker {
+  font-size: clamp(20px, 2.4vw, 26px);
+  font-weight: 400;
+  font-style: italic;
+  color: var(--text-secondary);
+  margin: 0 0 6px;
+  letter-spacing: 0.5px;
+  animation: hero-line-in 0.9s var(--ease-out-expo) var(--d, 0s) both;
+}
+
+.hero-title {
+  font-size: clamp(56px, 8.5vw, 108px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
 .hero-line {
   display: block;
   color: var(--text);
+  font-family: var(--font-gothic);
+  font-weight: 900;
+  font-style: normal;
+  letter-spacing: 0.5px;
+  animation: hero-line-in 1s var(--ease-out-expo) var(--d, 0s) both;
+}
+
+/* 时间戳行：日期固定左侧，时钟靠右，互不影响 */
+.welcome-timestamp {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-light);
+  width: 100%;
+  max-width: 460px;
   animation: hero-line-in 0.9s var(--ease-out-expo) var(--d, 0s) both;
 }
 
-.hero-line-accent {
-  color: var(--accent);
-  position: relative;
+.ts-clock {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  letter-spacing: 1px;
+  min-width: 8.5ch;
+  text-align: right;
+  white-space: nowrap;
 }
 
-.hero-line-accent::after {
-  content: '';
-  position: absolute;
-  left: 8%;
-  right: 8%;
-  bottom: 4px;
-  height: 10px;
-  background: rgba(var(--accent-rgb), 0.16);
-  z-index: -1;
-  border-radius: 3px;
-  transform: scaleX(0);
-  transform-origin: left;
-  animation: underline-grow 0.7s var(--ease-out-expo) 1s forwards;
+.ts-date {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  white-space: nowrap;
 }
 
-@keyframes underline-grow {
-  to { transform: scaleX(1); }
+/* 能力卡片 */
+.welcome-cues {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 720px;
+  margin-top: 6px;
+  animation: hero-line-in 0.9s var(--ease-out-expo) var(--d, 0s) both;
+}
+
+.cue {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 18px;
+  text-align: left;
+  background: var(--glass-light);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s var(--ease-out-expo), box-shadow 0.25s ease;
+  animation: cue-in 0.7s var(--ease-out-expo) both;
+  animation-delay: calc(0.95s + var(--cue-i) * 0.08s);
+}
+
+.cue:hover {
+  background: var(--panel);
+  border-color: var(--border);
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px var(--shadow-sm);
+}
+
+.cue:active {
+  transform: translateY(-1px);
+}
+
+.cue-index {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.25s ease;
+}
+
+.cue:hover .cue-index {
+  color: var(--text);
+}
+
+.cue-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cue-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.3px;
+}
+
+.cue-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.cue-arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  margin-top: 2px;
+  transition: transform 0.3s var(--ease-out-expo), color 0.25s ease;
+}
+
+.cue:hover .cue-arrow {
+  transform: translateX(4px);
+  color: var(--text);
+}
+
+@keyframes cue-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes hero-line-in {
@@ -1838,14 +2132,6 @@ function onRetryError() {
     transform: translateY(0);
     filter: blur(0);
   }
-}
-
-.welcome-hero-subtitle {
-  font-size: 15px;
-  color: var(--text-secondary);
-  margin: 0;
-  letter-spacing: 1px;
-  animation: hero-line-in 0.9s var(--ease-out-expo) var(--d, 0.45s) both;
 }
 
 @keyframes chip-in {
@@ -1924,17 +2210,29 @@ function onRetryError() {
     gap: 10px;
   }
 
-  .welcome-center {
-    padding: 0 20px;
-    gap: 24px;
+  .welcome-stage {
+    padding: 20px 18px 32px;
   }
 
-  .welcome-hero-title {
-    font-size: 32px;
+  .welcome-spread {
+    gap: 22px;
   }
 
-  .welcome-hero-subtitle {
-    font-size: 13px;
+  .hero-title {
+    font-size: 52px;
+  }
+
+  .hero-kicker {
+    font-size: 19px;
+  }
+
+  .ts-clock {
+    font-size: 18px;
+  }
+
+  .welcome-cues {
+    grid-template-columns: 1fr;
+    gap: 10px;
   }
 
   .chat-input-area {

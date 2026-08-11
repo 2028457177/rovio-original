@@ -14,6 +14,7 @@ _cfg = None
 
 
 def _get_config() -> dict:
+    """获取本服务的 MySQL 连接配置（带缓存），首次调用时补上游标与自动提交设置。"""
     global _cfg
     if _cfg is None:
         _cfg = get_mysql_config()

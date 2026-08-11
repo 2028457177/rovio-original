@@ -1,9 +1,12 @@
 """内置 SubAgent 注册：把所有领域工具按 SubAgent 维度组织。
 
 替代旧的 AIRAGAgent/skills/definitions.py，但复用同一批 @tool 函数。
-新增 codexec / browser / filesystem / memory / artifact 五个 SubAgent。
+新增 codexec / browser / filesystem / artifact 四个 SubAgent。
 
 注册后由 Orchestrator 通过 SubAgentRegistry 调度。
+
+注：记忆（memory）已改为向量检索 + 自动抽取方案（见 AIRAGAgent/agent/memory/），
+不再作为 SubAgent 暴露；Planner 阶段自动召回相关记忆注入上下文。
 """
 from AIRAGAgent.agent.sub_agent import SubAgent, SubAgentRegistry
 from AIRAGAgent.utils.logger_handler import logger
@@ -26,7 +29,6 @@ from AIRAGAgent.agent.tools.search_tools import search
 # ── 新增能力工具 ──
 from AIRAGAgent.agent.tools.codexec_tools import CODEXEC_TOOLS
 from AIRAGAgent.agent.tools.browser_tools import BROWSER_TOOLS
-from AIRAGAgent.agent.tools.memory_tools import MEMORY_TOOLS
 from AIRAGAgent.agent.tools.artifact_tools import ARTIFACT_TOOLS, create_artifact
 from AIRAGAgent.agent.tools.wordgen_tools import WORDGEN_TOOLS
 
@@ -96,13 +98,17 @@ CODEXEC_PROMPT = """你现在帮用户执行代码或命令。
 2. 因此**写文件一律用相对路径**，例如 open("report.xlsx", "w")、open("data/result.json", "w")，
    文件会自动保存到当前计划目录下，用户可在前端「AI 工作区」面板查看下载。
 3. **每个任务新建一个简短的任务名子目录**（用相对路径 os.makedirs("任务名", exist_ok=True) 或 open("任务名/xxx", "w")），
-   比如任务"抓取今日头条热点"就存到 "toutiao_top5/今日头条热点Top5.docx"。**禁止把文件直接扔在工作目录根**，
+   比如任务"抓取今日头条热点"就存到 "今日头条热点Top5/今日头条热点Top5.docx"。**禁止把文件直接扔在工作目录根**，
    这样一天内多个任务的文件就不会堆在一起，前端按「日期 → 任务」浏览一目了然。
-4. **不要写绝对路径**（如 "C:\\Users\\xxx\\Desktop\\xxx.xlsx"、"/tmp/xxx"），那会落到用户工作区外，
+4. **最终交付文件必须用中文命名**（如「今日头条热点Top5.docx」「统计数据.xlsx」「调研报告.pdf」），
+   不要用 report.xlsx、output.json、result.csv 这类英文通用名，让用户一眼看懂文件是什么。
+5. **只保留最终交付文件**：任务收尾前用 os.remove 删掉过程中的临时文件/中间数据
+   （raw 抓取数据、debug 输出、中间 csv/json、临时图片等），工作区里最终只留用户需要的成品。
+6. **不要写绝对路径**（如 "C:\\Users\\xxx\\Desktop\\xxx.xlsx"、"/tmp/xxx"），那会落到用户工作区外，
    触发 Windows UAC/Defender 拦截，且用户在前端看不到。
-5. 生成 Excel 用 openpyxl，生成 CSV 用内置 csv 模块，生成图片用 matplotlib，生成 PDF 用 reportlab——都是相对路径保存。
-6. 每个日期子目录独立保留 30 天，超期自动清理，重要文件请提醒用户及时下载。
-7. **读文件只允许读当前计划目录内的内容**：前序步骤的结果在 plan_results/ 下（如 plan_results/step_0.md），
+7. 生成 Excel 用 openpyxl，生成 CSV 用内置 csv 模块，生成图片用 matplotlib，生成 PDF 用 reportlab——都是相对路径保存。
+8. 每个日期子目录独立保留 30 天，超期自动清理，重要文件请提醒用户及时下载。
+9. **读文件只允许读当前计划目录内的内容**：前序步骤的结果在 plan_results/ 下（如 plan_results/step_0.md），
    你自己创建的临时文件也可以读。**禁止扫描/读取工作区里其他计划或任务的目录**（例如 ai_coding_tools/、data_pipeline/ 等），
    那不属于你的任务范围，也禁止用 os.listdir("..") 之类的越界遍历去"找数据"。
 
@@ -170,7 +176,7 @@ WordDoc 支持 4 套主题，**必须根据文档内容选最贴切的**：
 
 1. **只准用 WordDoc API，禁止写裸 python-docx**（from docx import ... / Document() / add_paragraph 都不要写）。裸 python-docx 没有中文字体和排版，生成的文档会很丑。WordDoc 已经处理好所有排版细节（封面页、页码、表格斑马纹、配色都内置）。
 2. **必须传 theme 参数**，按内容类型选（modern/official/fresh/academic），不要漏掉。
-3. **文件一律用相对路径保存**，放在任务名子目录下，例如 `doc.save("王者荣耀博主调研/生态调研报告.docx")`。禁止绝对路径。save 会自动建父目录，无需 makedirs。
+3. **文件一律用相对路径保存**，放在任务名子目录下，例如 `doc.save("生态调研报告.docx")` 或 `doc.save("王者荣耀博主调研/生态调研报告.docx")`。**文件名必须用中文**（如「当代年轻人视频内容喜好调研.docx」「2026年Q3工作报告.docx」），不要用 report.docx、output.docx 这类英文通用名。禁止绝对路径。save 会自动建父目录，无需 makedirs。
 4. **内容要充实完整**：把任务描述里给出的调研数据、前序步骤的结论都用上，组织成有标题、有段落、有表格的结构化文档，不要只写几句话敷衍。表格用于呈现数据对比，列表用于呈现要点。
 5. 如需前序步骤的完整数据，可在代码里 `open("plan_results/step_0.md", encoding="utf-8")` 读取（相对路径，**不带 plan_id 子目录**，就是 plan_results/step_<idx>.md）。
 6. 文档末尾用 `doc.p("本报告由 AI 调研助手生成", indent=False)` 之类做个简短署名收尾。
@@ -218,22 +224,6 @@ BROWSER_PROMPT = """你现在帮用户抓网页内容或截图。
 4. screenshot_url 返回"[截图成功] 已保存到 <path>"就完成了，不要继续调其他工具。
 5. run_shell_command('playwright install chromium') 会下载约 150MB，已配置国内镜像加速（淘宝源），正常 30-60 秒完成。timeout 设为 120。
 6. install_package('playwright') 也已配置 PyPI 清华镜像加速。"""
-
-MEMORY_PROMPT = """你负责管理用户的长期记忆。
-
-- remember(key_name, value, memory_type, confidence)：记住一条信息
-- recall(keyword, memory_type, limit)：召回记忆
-- recall_one(key_name)：精确读一条
-- forget(key_name, memory_id)：遗忘一条
-
-记忆类型：fact(事实) / preference(偏好) / project(项目) / schedule(日程)。
-
-主动记忆的时机：
-- 用户告诉你他的身份、职业、项目、偏好
-- 用户明确说"记一下"
-- 你判断某信息跨会话有价值
-
-不要记一次性的临时问题，不要记对话历史里已有的内容。"""
 
 ARTIFACT_PROMPT = """你负责管理 Artifact（一等公民产物）。
 
@@ -341,14 +331,8 @@ def register_all_subagents():
         max_tool_calls=12,
     ))
 
-    # ── 记忆与产物 SubAgent ──
-    registry.register(SubAgent(
-        name="memory",
-        description="长期记忆管理。记住/召回用户的长期事实、偏好、项目状态。跨会话可用。",
-        tools=MEMORY_TOOLS,
-        system_prompt=MEMORY_PROMPT,
-        category="memory",
-    ))
+    # ── 产物 SubAgent ──
+    # 注：记忆（memory）已改为向量检索 + 自动抽取，不再作为 SubAgent 暴露
 
     registry.register(SubAgent(
         name="artifact",

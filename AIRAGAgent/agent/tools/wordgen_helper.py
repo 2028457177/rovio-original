@@ -35,6 +35,7 @@ from docx.oxml import OxmlElement
 # ═══════════════════════════════════════════════
 
 def _rgb(hex_str: str) -> RGBColor:
+    """把十六进制颜色字符串（如 "2C3E50"）转换为 RGBColor 对象。"""
     return RGBColor(int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16))
 
 
@@ -116,6 +117,7 @@ def _set_run_font(run, font_name: str, size_pt: float, bold: bool = False,
 
 
 def _set_cell_shading(cell, hex_color: str):
+    """给 Word 表格单元格设置底色（hex_color 十六进制颜色）。"""
     tcPr = cell._tc.get_or_add_tcPr()
     for old in tcPr.findall(qn('w:shd')):
         tcPr.remove(old)
@@ -127,6 +129,7 @@ def _set_cell_shading(cell, hex_color: str):
 
 
 def _set_table_borders(table, hex_color: str, sz: int = 4):
+    """设置 Word 表格的整体边框样式（颜色与粗细）。"""
     tblPr = table._tbl.tblPr
     for old in tblPr.findall(qn('w:tblBorders')):
         tblPr.remove(old)
@@ -142,6 +145,7 @@ def _set_table_borders(table, hex_color: str, sz: int = 4):
 
 
 def _add_bottom_border(paragraph, hex_color: str, sz: int = 6):
+    """给段落添加下边框线（常用于分隔线效果）。"""
     pPr = paragraph._p.get_or_add_pPr()
     for old in pPr.findall(qn('w:pBdr')):
         pPr.remove(old)
@@ -156,6 +160,7 @@ def _add_bottom_border(paragraph, hex_color: str, sz: int = 6):
 
 
 def _set_cell_margins(table, top=60, bottom=60, left=100, right=100):
+    """设置表格所有单元格的内边距（单位：缇 twips）。"""
     tblPr = table._tbl.tblPr
     for old in tblPr.findall(qn('w:tblCellMar')):
         tblPr.remove(old)
@@ -204,6 +209,7 @@ class WordDoc:
 
     def __init__(self, title: str, theme: str = _DEFAULT_THEME,
                  subtitle: str = "", author: str = ""):
+        """初始化文档：设置页边距与默认样式，并按主题生成封面或标题块。"""
         self._doc = Document()
         self._theme = _THEMES.get(theme, _THEMES[_DEFAULT_THEME])
         self._has_cover = False
@@ -246,6 +252,7 @@ class WordDoc:
     # ── 封面 / 标题块 ──
 
     def _build_cover(self, title: str, subtitle: str, author: str):
+        """生成封面页：标题、装饰横线、副标题、署名与日期，末尾分页。"""
         th = self._theme
         # 顶部留白（约占页面 1/3）
         for _ in range(6):
@@ -294,6 +301,7 @@ class WordDoc:
         self._doc.add_page_break()
 
     def _build_title_block(self, title: str, subtitle: str, author: str):
+        """在首页顶部构建标题块（无封面主题时使用）。"""
         th = self._theme
         p = self._doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -461,6 +469,7 @@ class WordDoc:
     # ── 图片 / 分页 ──
 
     def image(self, path: str, width_cm: float = 14.0, caption: str = ""):
+        """在文档中插入一张图片，可选居中并带图注。"""
         th = self._theme
         p = self._doc.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -476,9 +485,11 @@ class WordDoc:
             _set_run_font(r, th["body_font"], _SIZE_CAPTION, color=th["subtitle"])
 
     def page_break(self):
+        """在文档中插入一个分页符。"""
         self._doc.add_page_break()
 
     def spacer(self, pt: float = 6):
+        """插入一个指定段后间距的空行作为留白。"""
         p = self._doc.add_paragraph()
         p.paragraph_format.space_after = Pt(pt)
         return p

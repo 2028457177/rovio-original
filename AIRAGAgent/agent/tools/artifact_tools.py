@@ -29,6 +29,7 @@ ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _uid() -> int:
+    """获取当前请求的用户 ID，未设置时抛异常。"""
     uid = user_id_var.get()
     if uid is None:
         raise RuntimeError("当前请求未设置 user_id_var，无法创建 artifact")

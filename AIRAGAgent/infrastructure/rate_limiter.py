@@ -10,11 +10,13 @@ RATE_LIMIT_PREFIX = "rate_limit:"
 
 class RateLimiter:
     def __init__(self, key_prefix: str, max_requests: int, window_seconds: int):
+        """初始化限流器：记录前缀、窗口内最大请求数与窗口时长。"""
         self.key_prefix = key_prefix
         self.max_requests = max_requests
         self.window_seconds = window_seconds
 
     def is_allowed(self, identifier: str) -> Tuple[bool, int]:
+        """判断指定标识符是否允许请求，返回 (是否放行, 剩余配额)。"""
         if not is_redis_available():
             return True, self.max_requests
 
@@ -43,6 +45,7 @@ class RateLimiter:
             return True, self.max_requests
 
     def reset(self, identifier: str):
+        """清除指定标识符的限流记录。"""
         if not is_redis_available():
             return
         try:
@@ -58,6 +61,7 @@ class RateLimiterFactory:
 
     @classmethod
     def get(cls, name: str) -> RateLimiter:
+        """按名称获取限流器实例（未创建则按配置新建并缓存）。"""
         if name not in cls._instances:
             config = RATE_LIMIT_CONFIG.get(name, {})
             max_requests = int(config.get("max_requests", 30))
@@ -71,8 +75,10 @@ class RateLimiterFactory:
 
 
 def get_chat_rate_limiter() -> RateLimiter:
+    """获取对话场景（chat）的限流器实例。"""
     return RateLimiterFactory.get("chat")
 
 
 def get_tool_rate_limiter() -> RateLimiter:
+    """获取工具调用场景的限流器实例。"""
     return RateLimiterFactory.get("tool")

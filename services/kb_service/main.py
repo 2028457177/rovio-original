@@ -39,6 +39,7 @@ async def _on_startup():
     loop = asyncio.get_event_loop()
 
     def _seed():
+        """在后台线程中执行默认知识库数据播种。"""
         from AIRAGAgent.kb.service import seed_default_kb
         seed_default_kb()
 
@@ -55,18 +56,22 @@ MAX_FILE_SIZE = 20 * 1024 * 1024  # 单文件 20MB
 # ==================== 公共工具 ====================
 
 def _err(status: int, msg: str) -> JSONResponse:
+    """构造统一的 JSON 错误响应体。"""
     return JSONResponse(status_code=status, content={"error": msg})
 
 
 def _safe_ext(filename: str) -> str:
+    """提取文件名后缀并转小写（去掉前导点），无后缀返回空字符串。"""
     return os.path.splitext(filename or "")[1].lstrip(".").lower()
 
 
 def _kb_file_rel_path(kb_id: int, md5: str, ext: str) -> str:
+    """拼接知识库文件在 uploads 目录下的相对存储路径。"""
     return f"uploads/kb/{kb_id}/{md5}.{ext}"
 
 
 def _abs_from_rel(rel_path: str) -> str:
+    """将相对路径转换为基于项目根目录的绝对路径。"""
     if os.path.isabs(rel_path):
         return rel_path
     return os.path.join(str(PROJECT_ROOT), rel_path)
@@ -152,6 +157,7 @@ def _do_replace(kb_id: int, doc_id: int, file: UploadFile, content: bytes, ext: 
 
 
 def _do_delete_doc(kb_id: int, doc_id: int) -> bool:
+    """删除知识库文档：先清向量、再删记录与物理文件，成功返回 True。"""
     doc = kb_models.get_document(doc_id)
     if not doc or doc["kb_id"] != kb_id:
         return False
@@ -162,6 +168,7 @@ def _do_delete_doc(kb_id: int, doc_id: int) -> bool:
 
 
 def _get_kb_or_404(kb_id: int, scope: str = "global"):
+    """按ID查询指定作用域的知识库，不存在或作用域不符返回 None。"""
     kb = kb_models.get_kb(kb_id)
     if not kb or kb["scope"] != scope:
         return None
@@ -284,6 +291,7 @@ async def admin_delete_kb(kb_id: int, admin: dict = Depends(get_admin_user)):
 
 @router.get("/api/admin/kb/{kb_id}/documents")
 async def admin_list_documents(kb_id: int, admin: dict = Depends(get_admin_user)):
+    """管理员：列出指定全局知识库下的全部文档。"""
     kb = _get_kb_or_404(kb_id, "global")
     if not kb:
         return _err(404, "知识库不存在")
@@ -328,6 +336,7 @@ async def admin_batch_delete_documents(kb_id: int, req: BatchDeleteRequest,
 
 @router.delete("/api/admin/kb/{kb_id}/documents/{doc_id}")
 async def admin_delete_document(kb_id: int, doc_id: int, admin: dict = Depends(get_admin_user)):
+    """管理员：删除指定知识库下的单个文档。"""
     if not _do_delete_doc(kb_id, doc_id):
         return _err(404, "文档不存在")
     return JSONResponse(content={"status": "ok"})
@@ -425,6 +434,7 @@ async def user_create_kb(req: KbCreateRequest, user: dict = Depends(get_current_
 
 
 def _user_kb_or_403(user: dict, kb_id: int):
+    """校验用户是否为该个人知识库的所有者，通过则返回知识库信息。"""
     if not kb_models.user_owns_kb(user["id"], kb_id):
         return None
     return kb_models.get_kb(kb_id)
@@ -459,6 +469,7 @@ async def user_delete_kb(kb_id: int, user: dict = Depends(get_current_user)):
 
 @router.get("/api/kb/mine/{kb_id}/documents")
 async def user_list_documents(kb_id: int, user: dict = Depends(get_current_user)):
+    """用户：列出个人知识库下的全部文档记录。"""
     kb = _user_kb_or_403(user, kb_id)
     if not kb:
         return _err(404, "知识库不存在")
@@ -492,6 +503,7 @@ async def user_upload_documents(kb_id: int, files: List[UploadFile] = File(...),
 @router.post("/api/kb/mine/{kb_id}/documents/batch-delete")
 async def user_batch_delete_documents(kb_id: int, req: BatchDeleteRequest,
                                       user: dict = Depends(get_current_user)):
+    """用户：批量删除个人知识库中的文档。"""
     if not _user_kb_or_403(user, kb_id):
         return _err(404, "知识库不存在")
     deleted = 0
@@ -503,6 +515,7 @@ async def user_batch_delete_documents(kb_id: int, req: BatchDeleteRequest,
 
 @router.delete("/api/kb/mine/{kb_id}/documents/{doc_id}")
 async def user_delete_document(kb_id: int, doc_id: int, user: dict = Depends(get_current_user)):
+    """用户：删除个人知识库中的单个文档。"""
     if not _user_kb_or_403(user, kb_id):
         return _err(404, "知识库不存在")
     if not _do_delete_doc(kb_id, doc_id):

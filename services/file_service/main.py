@@ -39,7 +39,8 @@ ALLOWED_EXTS = (".docx", ".doc")
 WORD_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 # AI 工作区文件浏览器要隐藏的子目录（playwright 浏览器二进制等系统目录）
-_HIDDEN_ENTRIES = {".playwright"}
+# plan_results 是计划执行中的步骤结果中间产物（完整数据已存 DB），对用户无价值，一律不展示
+_HIDDEN_ENTRIES = {".playwright", "plan_results"}
 
 
 @app.post("/api/upload-word")

@@ -60,6 +60,7 @@ def get_logger(
         file_level: int = logging.DEBUG,
         log_file = None
 ) -> logging.Logger:
+    """获取或创建指定名称的日志器，同时输出到控制台和日志文件并返回该日志器。"""
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     logger.propagate = False  # 防止日志传播到 root logger 被二次输出
