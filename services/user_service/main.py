@@ -129,11 +129,14 @@ async def upload_schedule(
     """上传 / 替换课表 Excel + 开学日期
 
     multipart/form-data:
-        file: .xlsx 课表文件
+        file: .xlsx / .xls 课表文件
         start_date: 'YYYY-MM-DD' 开学日期
     """
-    # 1. 校验文件后缀
-    if not file.filename.lower().endswith((".xlsx", ".xls")):
+    # 1. 校验文件后缀。UploadFile.filename 理论上总是字符串，
+    #    但客户端可以构造缺失 filename 的 multipart part，不能因此返回 500。
+    original_name = (file.filename or "").strip()
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in (".xlsx", ".xls"):
         return JSONResponse(status_code=400, content={"error": "仅支持 .xlsx / .xls 格式课表"})
 
     # 2. 校验大小（课表通常很小，限 2MB）
@@ -174,10 +177,11 @@ async def upload_schedule(
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Excel 解析失败：{e}"})
 
-    # 5. 覆盖式保存（文件名固定 schedule_{user_id}.xlsx，无需清旧）
+    # 5. 覆盖式保存。保留扩展名，否则上传 .xls 后会被伪装成 .xlsx，
+    #    get_schedule 读取时会因引擎/文件格式不匹配而失败。
     schedule_dir = UPLOAD_DIR_PATH / "schedules"
     schedule_dir.mkdir(parents=True, exist_ok=True)
-    file_name = f"schedule_{user['id']}.xlsx"
+    file_name = f"schedule_{user['id']}{suffix}"
     save_path = schedule_dir / file_name
     with open(save_path, "wb") as f:
         f.write(content)
@@ -186,6 +190,15 @@ async def upload_schedule(
     await asyncio.get_event_loop().run_in_executor(
         None, models.update_schedule, user["id"], rel_path, start_date, parsed_json
     )
+
+    # 清理用户此前使用另一种 Excel 扩展名上传时留下的旧文件，避免磁盘
+    # 垃圾和删除课表后仍残留可访问文件。
+    for old_suffix in (".xlsx", ".xls"):
+        if old_suffix != suffix:
+            try:
+                (schedule_dir / f"schedule_{user['id']}{old_suffix}").unlink(missing_ok=True)
+            except OSError as e:
+                logger.warning(f"[upload_schedule] 清理旧文件失败：{e}")
 
     return JSONResponse(content={
         "status": "ok",
