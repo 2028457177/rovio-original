@@ -4,6 +4,8 @@ upload_schedule 用 pandas 预校验 Excel 列名（header=2, index_col=0, 需�
 故需构造合法 xlsx。
 """
 import io
+import json
+import os
 
 from openpyxl import Workbook
 
@@ -22,6 +24,33 @@ def _make_schedule_xlsx() -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def _fetch_parsed_courses():
+    """直查测试库 user_schedules.parsed_courses（上传预解析结果）。"""
+    import pymysql
+    conn = pymysql.connect(
+        host=os.environ["MYSQL_HOST"],
+        port=int(os.environ["MYSQL_PORT"]),
+        user=os.environ["MYSQL_USER"],
+        password=os.environ["MYSQL_PASSWORD"],
+        database=os.environ["USER_DB"],
+        charset="utf8mb4",
+        cursorclass=pymysql.cursors.DictCursor,
+        autocommit=True,
+    )
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT parsed_courses FROM user_schedules WHERE user_id = 3001"
+            )
+            row = cur.fetchone()
+            raw = (row or {}).get("parsed_courses")
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+            return raw
+    finally:
+        conn.close()
 
 
 def test_upload_schedule_success(client, user_headers):
@@ -104,6 +133,38 @@ def test_get_schedule_settings_empty(client, user_headers):
     body = resp.json()
     assert body["uploaded"] is False
     assert body["file_path"] is None
+
+
+def test_upload_stores_parsed_courses(client, user_headers):
+    """上传时预解析课表存入 parsed_courses，查询侧无需再读 Excel。"""
+    client.post(
+        "/api/user/schedule",
+        headers=user_headers,
+        files={"file": ("s.xlsx", _make_schedule_xlsx(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"start_date": "2026-09-01"},
+    )
+    parsed = _fetch_parsed_courses()
+    assert parsed is not None
+    monday = parsed.get("星期一", [])
+    assert len(monday) == 1
+    entry = monday[0]
+    assert entry["name"] == "语文"
+    assert entry["time_slot"] == "1"
+
+
+def test_delete_clears_parsed_courses(client, user_headers):
+    client.post(
+        "/api/user/schedule",
+        headers=user_headers,
+        files={"file": ("s.xlsx", _make_schedule_xlsx(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        data={"start_date": "2026-09-01"},
+    )
+    assert _fetch_parsed_courses() is not None
+    resp = client.delete("/api/user/schedule", headers=user_headers)
+    assert resp.status_code == 200
+    assert _fetch_parsed_courses() is None
 
 
 def test_get_schedule_after_upload(client, user_headers):

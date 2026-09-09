@@ -219,7 +219,7 @@ def get_current_month(wantday:int)-> dict:
     want_date_str = target_date.strftime("%Y-%m-%d")
 
     # 从 DB 读取当前用户的开学日期（按用户隔离）
-    _, start_date_str = _load_user_schedule_path()
+    _, start_date_str, _ = _load_user_schedule_path()
     if not start_date_str:
         return {
             "date": want_date_str,
@@ -244,25 +244,26 @@ def get_current_month(wantday:int)-> dict:
     }
 
 
-def _load_user_schedule_path() -> tuple[str | None, str | None]:
-    """从当前上下文读取用户的课表绝对路径 + 开学日期。
+def _load_user_schedule_path() -> tuple[str | None, str | None, dict | None]:
+    """从当前上下文读取用户的课表绝对路径 + 开学日期 + 预解析课表。
 
-    返回 (abs_file_path, start_date_str)；未上传或读取出错时返回 (None, None)。
+    返回 (abs_file_path, start_date_str, parsed)；未上传或读取出错时返回 (None, None, None)。
+    parsed 为上传时预解析好的 {星期: [课程条目]} 结构（无则 None，查询时回退读 Excel）。
     内部 lazy import 避免与 database 模块产生循环依赖。
     """
     uid = user_id_var.get()
     if uid is None:
-        return None, None
+        return None, None, None
     try:
         from AIRAGAgent.database.models import get_schedule_settings
         settings = get_schedule_settings(int(uid))
         if not settings["uploaded"] or not settings["file_path"]:
-            return None, None
+            return None, None, None
         abs_path = str(UPLOAD_DIR / settings["file_path"])
-        return abs_path, settings["start_date"]
+        return abs_path, settings["start_date"], settings.get("parsed")
     except Exception as e:
         logger.warning(f"[_load_user_schedule_path] 读取用户 {uid} 课表设置失败：{e}")
-        return None, None
+        return None, None, None
 
 def generate_external_data():
     """
@@ -348,17 +349,12 @@ def get_schedule(week: int, day: str, file_path: str = None) -> List[Dict[str, A
     Returns:
         课程信息列表，每个课程包含：时间段、课程名、节次、地点、属性等
     """
-    # 使用默认文件路径或传入的路径
-    if file_path is not None:
-        file = file_path
-    else:
-        db_file, _ = _load_user_schedule_path()
-        if db_file is None:
-            return [{
-                "error": "未上传课表",
-                "hint": "请前往「设置 → 课表设置」上传你的课表 Excel 文件",
-            }]
-        file = db_file
+    # 输入验证
+    if day not in ("星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期天"):
+        error_msg = f"错误：星期输入应为 星期一~星期天 之一，收到：{day}"
+        print(error_msg)
+        return []
+
     # ========== 1. 辅助函数：解析周次字符串 ==========
     def _parse_weeks(week_str: str, week_type: str) -> List[int]:
         """
@@ -463,24 +459,35 @@ def get_schedule(week: int, day: str, file_path: str = None) -> List[Dict[str, A
 
         return '\n'.join(output)
 
-    # ========== 4. 主查询逻辑 ==========
+    # ========== 4a. 快速路径：上传时已预解析，直接查 DB 里的课表 JSON ==========
+    if file_path is None:
+        db_file, _, parsed = _load_user_schedule_path()
+        if parsed:
+            results = []
+            for course in parsed.get(day, []):
+                if week in course.get('weeks', []):
+                    results.append({
+                        '时间段': course.get('time_slot'),
+                        '课程名': course.get('name'),
+                        '节次': f"{course['start_section']}-{course['end_section']}节" if course.get(
+                            'start_section') else '未知',
+                        '地点': course.get('location'),
+                        '属性': course.get('attributes', []),
+                        '原始信息': course.get('raw')
+                    })
+            if not results:
+                print(f"第{week}周{day}没有课程安排")
+            return results
+        if db_file is None:
+            return [{
+                "error": "未上传课表",
+                "hint": "请前往「设置 → 课表设置」上传你的课表 Excel 文件",
+            }]
+        file = db_file
+    else:
+        file = file_path
 
-    # 星期映射（确保与表格列名一致）
-    day_to_col = {
-        '星期一': '星期一',
-        '星期二': '星期二',
-        '星期三': '星期三',
-        '星期四': '星期四',
-        '星期五': '星期五',
-        '星期六': '星期六',
-        '星期天': '星期天'
-    }
-
-    # 输入验证
-    if day not in day_to_col:
-        error_msg = f"错误：星期输入应为 {list(day_to_col.keys())} 之一"
-        print(error_msg)
-        return []
+    # ========== 4b. 兜底路径：旧数据没有预解析结果，现场读 Excel 并解析 ==========
 
     try:
         # 读取Excel，跳过前两行，第三行作为列名，第一列作为行索引（时间段）

@@ -147,9 +147,13 @@ async def upload_schedule(
     except ValueError:
         return JSONResponse(status_code=400, content={"error": "开学日期格式应为 YYYY-MM-DD"})
 
-    # 4. 用 pandas 预校验 Excel 列名（避免坏文件污染数据）
+    # 4. 用 pandas 预校验 Excel 列名（避免坏文件污染数据），并顺带预解析课程结构
     import io
+    import json
+
     import pandas as pd
+
+    from schedule_parser import parse_schedule_df
     try:
         df = pd.read_excel(io.BytesIO(content), header=2, index_col=0, sheet_name=0)
         required_cols = {"星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期天"}
@@ -159,6 +163,14 @@ async def upload_schedule(
             return JSONResponse(status_code=400, content={
                 "error": f"Excel 列名不符合要求，缺少：{missing}（需包含 星期一~星期天）"
             })
+        # 上传时解析一次存 DB，查询时免读 Excel；解析失败不阻塞上传（查询侧回退旧逻辑）
+        parsed_json = None
+        try:
+            parsed_json = json.dumps(
+                parse_schedule_df(df), ensure_ascii=False, separators=(",", ":")
+            )
+        except Exception as e:
+            logger.warning(f"[upload_schedule] 课表预解析失败（回退查询时解析）：{e}")
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": f"Excel 解析失败：{e}"})
 
@@ -172,7 +184,7 @@ async def upload_schedule(
 
     rel_path = f"schedules/{file_name}"
     await asyncio.get_event_loop().run_in_executor(
-        None, models.update_schedule, user["id"], rel_path, start_date
+        None, models.update_schedule, user["id"], rel_path, start_date, parsed_json
     )
 
     return JSONResponse(content={

@@ -139,20 +139,24 @@ def get_schedule_settings(user_id: int) -> dict:
         }
 
 
-def update_schedule(user_id: int, file_path: str, start_date: Optional[str]) -> bool:
-    """更新用户课表：写入文件相对路径 + 开学日期 + 上传时间。
+def update_schedule(user_id: int, file_path: str, start_date: Optional[str],
+                    parsed_courses: Optional[str] = None) -> bool:
+    """更新用户课表：写入文件相对路径 + 开学日期 + 上传时间 + 预解析结果。
 
     file_path: 相对 UPLOAD_DIR 的路径，如 'schedules/schedule_42.xlsx'
     start_date: 'YYYY-MM-DD' 字符串或 None
+    parsed_courses: 预解析课表 JSON 字符串（schedule_parser.parse_schedule_df 的输出），
+                    None 时存 NULL（查询侧回退旧 Excel 解析）
     """
     with get_db() as conn:
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO user_schedules (user_id, file_path, start_date, uploaded_at) "
-            "VALUES (%s, %s, %s, CURRENT_TIMESTAMP) "
+            "INSERT INTO user_schedules (user_id, file_path, start_date, parsed_courses, uploaded_at) "
+            "VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP) "
             "ON DUPLICATE KEY UPDATE file_path = VALUES(file_path), "
-            "start_date = VALUES(start_date), uploaded_at = CURRENT_TIMESTAMP",
-            (user_id, file_path, start_date)
+            "start_date = VALUES(start_date), parsed_courses = VALUES(parsed_courses), "
+            "uploaded_at = CURRENT_TIMESTAMP",
+            (user_id, file_path, start_date, parsed_courses)
         )
         conn.commit()
         return cur.rowcount > 0
@@ -186,7 +190,8 @@ def clear_schedule(user_id: int) -> Optional[str]:
         row = cur.fetchone()
         old_path = (row["file_path"] if row else "") or ""
         cur.execute(
-            "UPDATE user_schedules SET file_path = '', start_date = NULL, uploaded_at = NULL "
+            "UPDATE user_schedules SET file_path = '', start_date = NULL, "
+            "parsed_courses = NULL, uploaded_at = NULL "
             "WHERE user_id = %s",
             (user_id,)
         )

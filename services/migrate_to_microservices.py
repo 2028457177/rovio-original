@@ -204,6 +204,7 @@ def init_user_schema():
                     user_id BIGINT PRIMARY KEY,
                     file_path VARCHAR(255) NOT NULL DEFAULT '',
                     start_date DATE NULL,
+                    parsed_courses JSON NULL,
                     uploaded_at DATETIME NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """)

@@ -73,6 +73,7 @@ SCHEMA_SQL = [
         user_id BIGINT PRIMARY KEY,
         file_path VARCHAR(255) NOT NULL DEFAULT '',
         start_date DATE NULL,
+        parsed_courses JSON NULL,
         uploaded_at DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """,
@@ -115,6 +116,16 @@ def db_setup():
             cur.execute("USE lc_user_test")
             for sql in SCHEMA_SQL:
                 cur.execute(sql)
+            # 旧测试库可能没有 parsed_courses 列（0002 迁移前建的），补齐
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM information_schema.COLUMNS "
+                "WHERE TABLE_SCHEMA = 'lc_user_test' AND TABLE_NAME = 'user_schedules' "
+                "AND COLUMN_NAME = 'parsed_courses'"
+            )
+            if cur.fetchone()["n"] == 0:
+                cur.execute(
+                    "ALTER TABLE user_schedules ADD COLUMN parsed_courses JSON NULL AFTER start_date"
+                )
     finally:
         conn.close()
     yield

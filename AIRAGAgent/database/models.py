@@ -724,10 +724,12 @@ def get_schedule_settings(user_id: int) -> dict:
             start_date: str | None,       # 'YYYY-MM-DD'
             uploaded_at: str | None,      # 'YYYY-MM-DD HH:MM:SS'
             schedule_url: str | None,     # 前端下载用的 URL
+            parsed: dict | None,          # 上传时预解析的课表 {星期: [课程条目]}，查询免读 Excel
         }
     """
     # 1. 优先从 lc_user.user_schedules 读取（与上传端一致）
     try:
+        import json
         import os
         import pymysql
         svc_conn = pymysql.connect(
@@ -742,7 +744,7 @@ def get_schedule_settings(user_id: int) -> dict:
         )
         with svc_conn.cursor() as cursor:
             cursor.execute(
-                "SELECT file_path, start_date, uploaded_at "
+                "SELECT file_path, start_date, uploaded_at, parsed_courses "
                 "FROM user_schedules WHERE user_id = %s",
                 (user_id,)
             )
@@ -751,12 +753,19 @@ def get_schedule_settings(user_id: int) -> dict:
                 file_path = (row.get("file_path") or "").strip()
                 uploaded = bool(file_path)
                 schedule_url = f"/api/schedules/{file_path.split('/')[-1]}" if uploaded else None
+                raw_parsed = row.get("parsed_courses")
+                if isinstance(raw_parsed, str):
+                    try:
+                        raw_parsed = json.loads(raw_parsed)
+                    except (TypeError, ValueError):
+                        raw_parsed = None
                 return {
                     "uploaded": uploaded,
                     "file_path": file_path or None,
                     "start_date": row["start_date"].strftime("%Y-%m-%d") if row.get("start_date") else None,
                     "uploaded_at": row["uploaded_at"].strftime("%Y-%m-%d %H:%M:%S") if row.get("uploaded_at") else None,
                     "schedule_url": schedule_url,
+                    "parsed": raw_parsed or None,
                 }
     except Exception as e:
         logger.warning(f"[get_schedule_settings] 从 lc_user.user_schedules 读取失败，回退旧表：{e}")
@@ -772,7 +781,7 @@ def get_schedule_settings(user_id: int) -> dict:
         row = cursor.fetchone()
         if not row:
             return {"uploaded": False, "file_path": None, "start_date": None,
-                    "uploaded_at": None, "schedule_url": None}
+                    "uploaded_at": None, "schedule_url": None, "parsed": None}
         file_path = (row.get("schedule_file") or "").strip()
         uploaded = bool(file_path)
         # file_path 形如 'schedules/schedule_42.xlsx' → 提取文件名拼下载 URL
@@ -783,6 +792,7 @@ def get_schedule_settings(user_id: int) -> dict:
             "start_date": row["schedule_start_date"].strftime("%Y-%m-%d") if row.get("schedule_start_date") else None,
             "uploaded_at": row["schedule_uploaded_at"].strftime("%Y-%m-%d %H:%M:%S") if row.get("schedule_uploaded_at") else None,
             "schedule_url": schedule_url,
+            "parsed": None,
         }
 
 
