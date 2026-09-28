@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ─────────────────────────────────────────────
+  # 测试：PR 与 push 时跑现有 pytest 套件
+  # ─────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: lc123456
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -plc123456"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      MYSQL_HOST: 127.0.0.1
+      MYSQL_PORT: "3306"
+      MYSQL_USER: root
+      MYSQL_PASSWORD: lc123456
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6379"
+      JWT_SECRET_KEY: ci-secret
+      DEEPSEEK_API_KEY: dummy
+      TAVILY_API_KEY: dummy
+      AGENT_HOME: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        run: pip install uv
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: pytest（服务层测试：auth/kb/file/user/admin）
+        run: uv run pytest tests/auth_service tests/kb_service tests/file_service tests/user_service tests/admin_service -v --cov --cov-append --cov-report=
+      - name: pytest（chat_service API 测试）
+        run: uv run pytest tests/chat_service -v --cov --cov-append --cov-report=
+      - name: pytest（agent 核心测试）
+        run: uv run pytest tests/agent_core -v --cov --cov-append --cov-report=term-missing --cov-report=xml
+      - name: 上传覆盖率 XML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage.xml
+          retention-days: 14
+
+  # ─────────────────────────────────────────────
+  # 构建 / 推送镜像：push main 或 tag 时推到 GHCR；PR 仅验证可构建
+  # ─────────────────────────────────────────────
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: auth-service
+            dockerfile: Dockerfile
+            target: code-light
+            service: auth_service
+            port: "8001"
+          - name: user-service
+            dockerfile: Dockerfile
+            target: code-light
+            service: user_service
+            port: "8002"
+          - name: chat-service
+            dockerfile: Dockerfile
+            target: code-agent
+            service: chat_service
+            port: "8003"
+          - name: kb-service
+            dockerfile: Dockerfile
+            target: code-agent
+            service: kb_service
+            port: "8004"
+          - name: admin-service
+            dockerfile: Dockerfile
+            target: code-light
+            service: admin_service
+            port: "8005"
+          - name: file-service
+            dockerfile: Dockerfile
+            target: code-light
+            service: file_service
+            port: "8006"
+          - name: frontend
+            dockerfile: frontend/Dockerfile
+            target: "runtime"
+            service: ""
+            port: ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lowercase image owner
+        id: owner
+        run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            SERVICE_PORT=${{ matrix.port }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
